@@ -1,0 +1,208 @@
+APORIA Works Registration
+Copyright © 2016, 2017 Gord Dimitrieff <gord@aporia-records.com>
+
+APORIA Works Registration is a PHP library for reading, writing and manipulating CISAC Common Works Registration (CWR) files.  Aporia has been using this library in a production environment as a method of sending registrations to MusicMark and CMRRA directly from a Filemaker database since late 2016.
+
+*****
+
+I am releasing this library under the terms of the GNU GPL in the hope that others will find it useful, and help contribute to its development.  If the terms of the GPL do not work for you, please contact me about making alternative licensing arrangements.
+
+Most of the CWR specification is supported, with the exception of Agreements (AGR, TER and IPI records), and non-Roman character records (NPN, NWN, NAT, NET, NOW, NVT, NPR, NCT and NOW records).  MSG records are currently supported as read-only (and may stay this way, unless a society wants to get involved in this project).
+
+Please forward me any modifications/contributions you make to the library so they can be incorporated into the next release.
+
+If you find this library at all useful, I would like to hear from you!
+
+You can contact me here: <gord@aporia-records.com>
+
+*****
+
+Before you attempt to use this library, you will need to have a solid understanding of the CWR file format.  It is a flat text file, where the first 3 characters of each line specify what type of data is contained in that line.  Before making use of this library, you should read both the Functional Specifications and the CWR User Manual:
+
+Functional Specifications for CWR 2.2:
+http://members.cisac.org/CisacPortal/consulterDocument.do?id=29541
+
+CWR User Manual:
+http://members.cisac.org/CisacPortal/consulterDocument.do?id=22272
+
+Most of the library functions take an array as an argument, and I have attempted to use the same or similar field names to the CWR specification in these arrays.  See below for a summary of arguments required.
+
+Design objectives/considerations:
+
+* CWR Validity:
+A major goal of this library is to only generate valid CWR files.  Not all possible errors are currently detected, but the most common ones are.
+
+* NWR vs REV transactions:
+A design goal is to automatically determine whether or not a transaction is a new registration or a revised registration.  This is accomplished by pre-loading all existing society registration IDs, and categorizing a transaction as a REV if it has already been submitted to the receiving society.  Consequently, tracking and supplying these IDs is mandatory.  This has the added benefit of also allowing the support of CWR 2.2's XRF record type.
+
+* Why PHP?
+I chose PHP because at one point in time I was limited to the SmartPill PHP plugin for Filemaker.  It is not the most memory efficient language, but the automatic array/dictionary hashing does make this type of project relatively easy.  The biggest use of memory is storing the TIS territory data as a hierarchal data tree.  If this becomes a major problem in the future, it could be converted to a nested set and loaded from a database, which would probably save memory.
+
+In the meantime, if you find you have memory issues, upgrading to PHP 7+ might help, as it is approximately 30% more memory efficient. 
+
+Having said all this, I have not encountered any major memory problems yet, and I have been preparing CWR files with hundreds of transactions.
+
+*****
+
+Basic logic for creating a CWR file from song and recording metadata:
+
+1. Create a new instance of the WorksRegistration object using WorksRegistration():
+	$cwr = new WorksRegistration($submitter_code, $submitter_ipi);
+
+
+2. Add recordings using addTrack() and addRelease():
+	foreach ($tracks as $t) if(!empty($t['ISRC'])) $cwr->addTrack($t);
+	foreach($tracks_releases as $t) if(!empty($t['ISRC'])) $cwr->addTrack($t);
+	foreach($releases as $r) $cwr->addRelease($r);
+
+
+3. Add songs and song splits using NewWork():
+	$cwr->NewWork($song);
+
+4. Add share and collection rights (by territory) using NewShare() and addTerritory():
+	foreach($shares as $share)
+		if($share['Work_ID'] == $song['Work_ID'])
+		{
+			$cwr->NewShare($share);
+
+			foreach($Territory[$share['Territory_Set']] as $territory)
+				$cwr->addTerritory($territory['TIS_Number'], $territory['Indicator']);
+		}
+
+
+5. Add existing society registration numbers using addXRef():
+	if(isset($XRF[$song['Work_ID']]))
+		foreach($XRF[$song['Work_ID']] as $xrf)
+			$cwr->addXRef($xrf);
+
+
+6. Add song shareholder details using addShareholder():
+	foreach($shareholders as $shareholder)
+		if(!$cwr->addShareholder($shareholder)) printf("%s\n", $cwr->LastMsg());
+
+
+7. Create CWR file data using WriteCWR():
+	$cwr->WriteCWR();
+	file_put_contents($cwr->cwr_filename(), $cwr->CWR_File_Contents);
+
+*****
+
+Basic logic to import works from a CWR file:
+
+1. Create a new instance of the WorksRegistration object using WorksRegistration():
+	$cwr = new WorksRegistration($submitter_code, $submitter_ipi);
+
+2. Load the CWR file contents and parse it using ReadCWR():
+	$cwr->CWR_File_Contents = file_get_contents("CW170024088_APO.V21");
+	$cwr->ReadCWR();
+
+3. Loop through the resulting songs using NextWork() and getWorkDetails():
+
+	$cwr->CurrentWork = 0;
+	while($cwr->NextWork())
+	{
+		$work = $cwr->getWorkDetails();
+		if(!$work) printf("No work returned!\n");
+
+		printf("\nWork:\n%s", $work['Title']);
+
+4. The percentage of a work controlled can be calculated using percentageControlled():
+		printf(" - This work is %02.2f%% controlled by the submitter.\n", $cwr->percentageControlled());
+
+5. Loop through all of a song's shares using NextShare() and getShareDetails():
+		$cwr->CurrentShare = 0;
+		while($cwr->NextShare()) 
+		{
+			$shareholder = $cwr->getShareDetails();
+			$ipi =& $shareholder['IPI'];
+
+6. Lookup the details of each shareholder by referencing the Shareholders array:		
+			$shareholder['Name'] = $cwr->Shareholders[$ipi]['Name']." ".$cwr->Shareholders[$ipi]['First_Name'];
+			printf("\nShareholder:\n%s (%d) - %0.2f%% / %0.2f%%\n", $shareholder['Name'], $shareholder['IPI'], $shareholder['PR_Ownership_Share'], $shareholder['MR_Ownership_Share']);
+
+7. Collection rights for the current share can be found in the TIS records specified in the CWR file using getTISentries():
+			$tis_entries = $cwr->getTISentries();
+
+8. Collection rights can also be determined for every individual ISO country code by using getCollectionValues():
+			if($collection_shares = $cwr->getCollectionValues())
+			{
+				printf("Collection rights in %d territories - derived from %s TIS statement(s):\n", count($collection_shares), count($tis_entries));
+				foreach($tis_entries as $tis) printf("TIS %04d (%s): %s\n", $tis['TIS-N'], $tis['Indicator'], $tis['Name']);
+				printf("%s\n\n", implode(", ", array_keys($collection_shares)));			
+			}
+			else printf("No collection rights defined.\n");
+		}
+	}
+
+*****
+
+Function arguments to be supplied as arrays:
+
+Array elements for NewWork():
+'Title'									=> Work title
+'Lang'									=> Language code
+'Work_ID'								=> Submitter's Work ID number
+'ISWC'									=> ISWC, if known
+'Copyright_Date'						=> Copyright date
+'Copyright_Number'						=> Copyright number
+'Musical_Work_Distribution_Category'	=> JAZ, POP, SER, or UNC
+'Duration'								=> Duration - can be either HHMMSS or HH:MM:SS
+'Recorded_Flag'							=> Y or N, indicates whether this work has been recorded
+'Text_Music_Relationship'				=> MUS, MTX or TXT
+'Composite_Type'						=> can be blank, otherwise COS, MED, POT, or UCO
+'Version_Type'							=> MOD or ORI
+'Music_Arrangement'						=> NEW, ARR, ADM, UNS or ORI
+'Lyric_Adaptation'						=> NEW, MOD, NON, ORI, REP, ADL, UNS or TRA
+'Contact_Name'							=> not currently used
+'Contact_ID'							=> not currently used
+'CWR_Work_Type'							=> TA, AC, AR, AL, AM, BD, BL, CD, CL, CC, CT, DN, FM, FK, BG, SG,
+ 											JZ, JG, LN, LA, NA, OP, PK, PP, RP, RK, RB, SD or SY
+'Grand_Rights_Ind'						=> Y or N: Grand Rights indicator
+'Composite_Component_Count'				=> Composite component count
+
+
+Array elements for NewShare():
+'IPI'							=> The shareholder's IPI number, or a temporary ID number <100000000 if the IPI is unknown
+'Role'							=> AD, AR, A, C, CA, SR, SA, TR, PA, AQ, AM, PA, E, ES, or SE
+'PR_Ownership_Share'			=> floating point number
+'MR_Ownership_Share'			=> floating point number
+'SR_Ownership_Share'			=> floating point number
+'Link'							=> integer that identifies the chain of title.  There can only be one publisher on a chain of title.
+'coPublisher'					=> integer that identifies the main chain of title if this is a co-publisher on a separate chain.
+
+
+Array elements for addShareholder():
+'IPI'			=> IPI of the shareholder, or a temporary ID number <100000000 if the IPI is unknown
+'Name'			=> Writer's last name, or the name of the music publisher
+'First_Name'	=> Writer's first name
+'Controlled'	=> Y or N indicates whether or not this is a controlled shareholder
+'PRO'			=> integer identifying the shareholder's PRO affiliation (from the CISAC lookup tables)
+'US_Rep'		=> A, B, S (ASCAP, BMI, SESAC)
+'MRO'			=> integer identifying the shareholder's MRO affiliation (from the CISAC lookup tables)
+'SRO'			=> integer identifying the shareholder's SRO affiliation (from the CISAC lookup tables)
+
+
+Array elements for addXRef():
+'Organisation_Code'	=> the CISAC society ID for the relevant organization
+'Identifier'		=> The organization's reference ID 
+'Identifier_Type'	=> W, R, P or V
+'Validity'			=> Y, N or U
+
+
+Array elements for addTrack():
+'Track_ID'		=> internal Track ID reference
+'Duration'		=> track duration - can be either HHMMSS or HH:MM:SS
+'Artist_Name'	=> Artist name
+'Title'			=> Track title
+'Version'		=> Track version (e.g. "remix", etc.)
+'Label_Name'	=> Name of record label
+
+
+Array elements for addRelease():
+'UPC'			=> UPC of release
+'Title'			=> Title of release
+'Label'			=> Name of record label
+'Cat_No'		=> Release catalogue number
+'Media_type'	=> BIEM/CISAC Media Type (from lookup table) 
+'Release_Date'	=> Release date - can be formatted as either YYYYMMDD or YYYY-MM-DD
+
