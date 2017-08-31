@@ -15,3 +15,28 @@ The APORIA Works Registration library is distributed under the terms of the GNU 
 * CWR Light (i.e. the SOC transaction type) is not currently implemented.
 * The library has been designed to handle CWR 2.2, but I have not been able to test this, since none of the societies I belong to have implemented CWR 2.2 yet.
 * As Aporia does not represent any works in the 'serious' distribution category, record types COM, INS, and IND have not been thoroughly tested.
+
+## CWR Technical Background
+Before you attempt to use this library, you will need to have a solid understanding of the CWR file format.  It is a flat text file, where the first 3 characters of each line specify what type of data is contained in that line.  Before making use of this library, you should read both the Functional Specifications and the CWR User Manual:
+
+Functional Specifications for CWR 2.2:
+http://members.cisac.org/CisacPortal/consulterDocument.do?id=29541
+
+CWR User Manual:
+http://members.cisac.org/CisacPortal/consulterDocument.do?id=22272
+
+Most of the library functions take an array as an argument, and I have attempted to use the same or similar field names to the CWR specification in these arrays.  See below for a summary of arguments required.
+
+## Design objectives/considerations:
+#### CWR Validity:
+A major goal of this library is to only generate valid CWR files.  Not all possible errors are currently detected, but the most common ones are.
+
+#### NWR vs REV transactions:
+A design goal is to automatically determine whether or not a transaction is a new registration or a revised registration.  This is accomplished by pre-loading all existing society registration IDs, and categorizing a transaction as a REV if it has already been submitted to the receiving society.  Consequently, tracking and supplying these IDs is mandatory.  This has the added benefit of also allowing the support of CWR 2.2's XRF record type.
+
+#### Why PHP? 
+I chose PHP because at one point in time I was limited to the SmartPill PHP plugin for Filemaker.  It is not the most memory efficient language, but the automatic array/dictionary hashing does make this type of project relatively easy.  The biggest use of memory is storing the TIS territory data as a hierarchal data tree.  If this becomes a major problem in the future, it could be converted to a nested set and loaded from a database, which would probably save memory.
+
+In the meantime, if you find you have memory issues, upgrading to PHP 7+ might help, as it is approximately 30% more memory efficient. 
+
+Having said all this, I have not encountered any major memory problems yet, and I have been preparing CWR files with hundreds of transactions.
