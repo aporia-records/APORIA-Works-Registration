@@ -158,6 +158,10 @@ class WorksRegistration {
 		$this->setWorkDetails($data);
 		$this->Works[$this->CurrentWork]['PER'] = array();
 
+//		$this->track[$isrc]['Releases'][]['UPC'] = $upc;
+//		$this->release[$upc]['Tracks'][] = array('Track_ID' => $data['Track_ID'], 'ISRC' => $data['ISRC'], 'Work_ID' => $data['Work_ID'], 'ISWC' => $data['ISWC']);
+
+
 		$this->CurrentShare = 0; //reset share index for new song
 		$this->CurrentXRef = 0; //reset XRef index for new song
 		
@@ -341,6 +345,18 @@ class WorksRegistration {
 		else return(false);
 	}
 
+	function removeShareDetail($element)
+	{
+		if(isset($this->Works[$this->CurrentWork]['Share']))
+		{
+			$this->Works[$this->CurrentWork]['Share'][$element] = null;
+			unset($this->Works[$this->CurrentWork]['Share'][$element]);
+
+			return(true);
+		}
+		return(false);
+	}
+
 	function getTISentries() // Return array of TIS entries along with territory names and codes
 	{
 		$shareKey = $this->CurrentShare;
@@ -433,9 +449,15 @@ class WorksRegistration {
 			if(!array_key_exists('SR_Collection_Share', $this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]))
 				$this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['SR_Collection_Share'] = 0;
 
+			if(!array_key_exists('Shares_Change', $this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]))
+				$this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['Shares_Change'] = '';
+
 			return(true);
 		}
-		else return(false);
+		else {
+			$this->Msgs[] = sprintf("addTerritory() requires an array as argument! - Got '%s'", $data);
+			return(false);
+		}
 	}
 
 	function sortShares()
@@ -472,7 +494,7 @@ class WorksRegistration {
 		$work =& $this->Works[$this->CurrentWork];  // set up $work is a reference to the current work
 
 		if(empty($work['Recorded_Flag'])) $work['Recorded_Flag'] = 'U';
-		if(count($work['ISRC']) > 0) $work['ISRC'] = array_unique($work['ISRC']); // Remove any duplicate ISRC values
+		if(empty($work['ISRC'])) unset($work['ISRC']); // Strip empty ISRC values
 
 		if(empty($work['Version_Type'])) $work['Version_Type'] = 'ORI'; // Default to type 'Original Work'
 		if(empty($work['Musical_Work_Distribution_Category'])) $work['Musical_Work_Distribution_Category'] = 'POP'; // Default to distribution category 'Popular'
@@ -487,6 +509,28 @@ class WorksRegistration {
 				return(false);
 			}
 		}
+
+		// Match Works to Tracks
+		foreach($this->track as $isrc => $trackDetails)
+		{
+			$track =& $this->track[$isrc];
+
+			if(!empty($track['Work_ID']))
+			{
+				if($work['Work_ID'] == $track['Work_ID'])
+				{
+					// Add ISRC to Work details
+					$work['ISRC'][] = str_replace("-", "", $track['ISRC']);
+					$work['ISRC'] = array_unique($work['ISRC']);
+
+					// Add ISWC to Track details
+					if(empty($work['ISWC'])) $track['ISWC'] = $work['ISWC'];
+				}
+
+			}
+		}
+
+		if(isset($work['ISRC'])) foreach($work['ISRC'] as $isrc_key => $isrc) if(empty($isrc)) unset($work['ISRC'][$isrc_key]);
 
 		if(isset($work['ORN']))
 		{
@@ -963,26 +1007,10 @@ class WorksRegistration {
 			return(false);
 		}
 
-		$data['ISRC'] = str_replace("-", "", $data['ISRC']);
-		$isrc = $data['ISRC'];
+		if(empty($data['UPC']) && isset($data['EAN'])) $data['UPC'] =& $data['EAN'];
 
-		// if the Work_ID is known populate ISWC in the Track entry, and add the ISRC to the Works entry
-		if(!empty($data['Work_ID']))
-		{
-			for($i = 1; $i<count($this->Works); $i++)
-			{
-				if($this->Work[$i]['Work_ID'] == $data['Work_ID']) 
-				{
-					$data['ISWC'] = $this->Work[$i]['ISWC'];
-					$this->Work[$i]['ISRC'][] = $isrc;
-					$this->Work[$i]['ISRC'] = array_unique($this->Work[$i]['ISRC']);
-				}
-			}
-		}
-		if(empty($data['UPC']) && !empty($data['EAN'])) $data['UPC'] =& $data['EAN'];
+		$isrc = str_replace("-", "", $data['ISRC']);
 
-		$upc = $data['UPC'];
-		unset($data['UPC']);
 
 		if(!empty($data['id']))
 		{
@@ -992,11 +1020,19 @@ class WorksRegistration {
 
 		if(empty($data['Label']) && !empty($data['Rights_Holder_Name'])) $data['Label'] = $data['Rights_Holder_Name'];
 
+		if(!empty($data['UPC']) > 0)
+		{
+			$upc = $data['UPC'];
+			unset($data['UPC']);
+
+			$this->track[$isrc]['Releases'][]['UPC'] = $upc;
+			$this->release[$upc]['Tracks'][] = array('Track_ID' => $this->track[$isrc]['Track_ID'], 'ISRC' => $this->track[$isrc]['ISRC'], 'Work_ID' => $this->track[$isrc]['Work_ID'], 'ISWC' => $this->track[$isrc]['ISWC']);
+		}
+
 		foreach($data as $key => $value)
 			if(!is_array($value)) $this->track[$isrc][$key] = strtoupper(trim($value));
 
-		$this->track[$isrc]['Releases'][]['UPC'] = $upc;
-		$this->release[$upc]['Tracks'][] = array('Track_ID' => $this->track[$isrc]['Track_ID'], 'ISRC' => $this->track[$isrc]['ISRC'], 'Work_ID' => $this->track[$isrc]['Work_ID'], 'ISWC' => $this->track[$isrc]['ISWC']);
+		if(empty($this->track[$isrc]['Releases'])) $this->track[$isrc]['Releases'] = array();
 
 		return(true);
 	}
@@ -1015,6 +1051,7 @@ class WorksRegistration {
 			}
 
 			$upc = $data['UPC'];
+			if(!empty($data['ISRC'])) $data['ISRC'] = str_replace("-", "", $data['ISRC']);
 
 			foreach($data as $key => $value)
 				if(!is_array($value)) $this->release[$upc][$key] = strtoupper(trim($value));
@@ -1274,6 +1311,7 @@ class WorksRegistration {
 /******************************************************/
 	function WriteCWR()
 	{
+		
 		/*
 			Usage Notes:
 			WriteCWR() creates a CWR text file in $this->CWR_File_Contents
@@ -1345,6 +1383,7 @@ class WorksRegistration {
 		{
 			$this->validateWork();
 			$work = $this->getWorkDetails();
+
 			if($work['Transaction_Type'] & self::CWR_NWR)	$RegistrationTypes = $RegistrationTypes | self::CWR_NWR;
 			if($work['Transaction_Type'] & self::CWR_REV)	$RegistrationTypes = $RegistrationTypes | self::CWR_REV;
 			if($work['Transaction_Type'] & self::CWR_ISW)	$RegistrationTypes = $RegistrationTypes | self::CWR_ISW;
@@ -1534,8 +1573,10 @@ class WorksRegistration {
 									// New in v1.41: Only include sub-publishers that have defined collection rights (possible if the TIS array has been re-written)
 									if(!empty($shareholder['TIS']) && count($shareholder['TIS']) > 0)
 										$publisher[] = $this->getShareDetails();
-									else $this->Msgs[] = sprintf("NOTICE: Sub-Publisher '%s' has no collection rights in the relevant territorie(s) - removed from CWR.\n", $this->Shareholders[$shareholder['IPI']]['Name']);
-
+									else 
+									{
+										$this->Msgs[] = sprintf("NOTICE: Sub-Publisher '%s' has no collection rights in the relevant territorie(s) - removed from CWR.\n", $this->Shareholders[$shareholder['IPI']]['Name']);
+									}
 									break;
 								}
 
@@ -1797,9 +1838,10 @@ class WorksRegistration {
 						}
 
 						/* REC - Recording Detail - only create a record if we have an associated ISRC */
+//						if(!empty($work['ISRC']))
 						if(is_array($work['ISRC']))
 						{
-							foreach($work['ISRC'] as $isrc) // Multiple 'REC' records allowed since CWR 2.1r7
+							if(count($work['ISRC']) > 0) foreach($work['ISRC'] as $isrc)
 							{
 								$sq++;
 								$rc++;
@@ -2298,7 +2340,7 @@ class WorksRegistration {
 							'ISWC'					=> $this->Works[$this->CurrentWork]['ISWC'],
 							'Duration'				=> $record['First_Release_Duration'],
 							'ISRC'					=> $record['ISRC'],
-							'UPC'					=> intval($record['EAN']),
+//							'UPC'					=> intval($record['EAN']),
 							'ISRC_Validity'			=> $record['ISRC_Validity'],
 							'Recording_Format'		=> $record['Recording_Format'],
 							'Recording_Technique'	=> $record['Recording_Technique'],
