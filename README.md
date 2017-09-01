@@ -25,7 +25,8 @@ http://members.cisac.org/CisacPortal/consulterDocument.do?id=29541
 CWR User Manual:
 http://members.cisac.org/CisacPortal/consulterDocument.do?id=22272
 
-Most of the library functions take an array as an argument, and I have attempted to use the same or similar field names to the CWR specification in these arrays.  See below for a summary of arguments required.
+## Library Documentation
+[See the wiki for documentation.](https://github.com/aporia-records/APORIA-Works-Registration/wiki)
 
 ## Design objectives/considerations:
 #### CWR Validity:
