@@ -3,7 +3,8 @@ Copyright © 2016, 2017 Gord Dimitrieff <gord@aporia-records.com>
 
 APORIA Works Registration is a PHP library for reading, writing and manipulating CISAC Common Works Registration (CWR) v2.1R7 and v2.2 files. Aporia has been using this library in a production environment as a method of sending registrations to MusicMark and CMRRA directly from a Filemaker database since late 2016.
 
-You can also find the most recent version posted here: http://aporia-records.com/awr/
+You can also find the most recent version posted here:  
+http://aporia-records.com/awr/
 
 The APORIA Works Registration library is distributed under the terms of the GNU General Public License.  You can redistribute it and/or modify it under the terms of the GNU GPL as published by the Free Software Foundation.  Visit http://www.gnu.org/licenses/ for more information.
 
@@ -19,10 +20,10 @@ The APORIA Works Registration library is distributed under the terms of the GNU 
 ## CWR Technical Background
 Before you attempt to use this library, you will need to have a solid understanding of the CWR file format.  It is a flat text file, where the first 3 characters of each line specify what type of data is contained in that line.  Before making use of this library, you should read both the Functional Specifications and the CWR User Manual:
 
-Functional Specifications for CWR 2.2:
+Functional Specifications for CWR 2.2:  
 http://members.cisac.org/CisacPortal/consulterDocument.do?id=29541
 
-CWR User Manual:
+CWR User Manual:  
 http://members.cisac.org/CisacPortal/consulterDocument.do?id=22272
 
 ## Library Documentation
