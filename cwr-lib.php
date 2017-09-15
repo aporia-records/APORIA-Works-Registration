@@ -27,6 +27,286 @@
 define("EDI_Version", "01.10");
 define("CWR_Version", "02.10"); // CWR2.1
 
+/*	UPC and EAN-13 check digit validator
+	Apr 24, 2009
+	This code is licensed for use under the LGPLv3
+	(C) 2009 Marty Anstey
+	https://marty.anstey.ca/
+	This function has been optimized for speed fairly well. I tested this function against over one million EAN-13 codes from www.upcdatabase.com and all check digits were validated correctly. Only a few hand-typed UPC codes were tested however, so if you experience any problems please let me know (visit the contact page on my website) and please pass along the offending UPC code.
+	If you end up using this function in your application, a note in the credits would be appreciated ;)
+	No error checking is performed; expects a 12 or 13 digit code only. Returns TRUE if the check digit in the UPC or EAN-13 code is correct, FALSE otherwise.
+*/
+	function verifycheckdigit($val) {
+		return ((((ceil(($a=((strlen($val)==12)?((($val[0]+$val[2]+$val[4]+$val[6]+$val[8]+$val[10])*3)+($val[1]+$val[3]+$val[5]+$val[7]+$val[9])):(($val[0]+$val[2]+$val[4]+$val[6]+$val[8]+$val[10])+(($val[1]+$val[3]+$val[5]+$val[7]+$val[9]+$val[11])*3))))/10))*10-$a)==substr($val,-1,1))?TRUE:FALSE);
+	}
+
+function is_valid_isrc($isrc)
+{
+	$country_codes = array(
+
+		// ISO 3166-1 alpha 2 Codes:
+		'AF', // 'Afghanistan',
+		'AX', // 'Aland Islands',
+		'AL', // 'Albania',
+		'DZ', // 'Algeria',
+		'AS', // 'American Samoa',
+		'AD', // 'Andorra',
+		'AO', // 'Angola',
+		'AI', // 'Anguilla',
+		'AQ', // 'Antarctica',
+		'AG', // 'Antigua And Barbuda',
+		'AR', // 'Argentina',
+		'AM', // 'Armenia',
+		'AW', // 'Aruba',
+		'AU', // 'Australia',
+		'AT', // 'Austria',
+		'AZ', // 'Azerbaijan',
+		'BS', // 'Bahamas',
+		'BH', // 'Bahrain',
+		'BD', // 'Bangladesh',
+		'BB', // 'Barbados',
+		'BY', // 'Belarus',
+		'BE', // 'Belgium',
+		'BZ', // 'Belize',
+		'BJ', // 'Benin',
+		'BM', // 'Bermuda',
+		'BT', // 'Bhutan',
+		'BO', // 'Bolivia',
+		'BA', // 'Bosnia And Herzegovina',
+		'BW', // 'Botswana',
+		'BV', // 'Bouvet Island',
+		'BR', // 'Brazil',
+		'IO', // 'British Indian Ocean Territory',
+		'BN', // 'Brunei Darussalam',
+		'BG', // 'Bulgaria',
+		'BF', // 'Burkina Faso',
+		'BI', // 'Burundi',
+		'KH', // 'Cambodia',
+		'CM', // 'Cameroon',
+		'CA', // 'Canada',
+		'CV', // 'Cape Verde',
+		'KY', // 'Cayman Islands',
+		'CF', // 'Central African Republic',
+		'TD', // 'Chad',
+		'CL', // 'Chile',
+		'CN', // 'China',
+		'CX', // 'Christmas Island',
+		'CC', // 'Cocos (Keeling) Islands',
+		'CO', // 'Colombia',
+		'KM', // 'Comoros',
+		'CG', // 'Congo',
+		'CD', // 'Congo, Democratic Republic',
+		'CK', // 'Cook Islands',
+		'CR', // 'Costa Rica',
+		'CI', // 'Cote D\'Ivoire',
+		'HR', // 'Croatia',
+		'CU', // 'Cuba',
+		'CY', // 'Cyprus',
+		'CZ', // 'Czech Republic',
+		'DK', // 'Denmark',
+		'DJ', // 'Djibouti',
+		'DM', // 'Dominica',
+		'DO', // 'Dominican Republic',
+		'EC', // 'Ecuador',
+		'EG', // 'Egypt',
+		'SV', // 'El Salvador',
+		'GQ', // 'Equatorial Guinea',
+		'ER', // 'Eritrea',
+		'EE', // 'Estonia',
+		'ET', // 'Ethiopia',
+		'FK', // 'Falkland Islands (Malvinas)',
+		'FO', // 'Faroe Islands',
+		'FJ', // 'Fiji',
+		'FI', // 'Finland',
+		'FR', // 'France',
+		'GF', // 'French Guiana',
+		'PF', // 'French Polynesia',
+		'TF', // 'French Southern Territories',
+		'GA', // 'Gabon',
+		'GM', // 'Gambia',
+		'GE', // 'Georgia',
+		'DE', // 'Germany',
+		'GH', // 'Ghana',
+		'GI', // 'Gibraltar',
+		'GR', // 'Greece',
+		'GL', // 'Greenland',
+		'GD', // 'Grenada',
+		'GP', // 'Guadeloupe',
+		'GU', // 'Guam',
+		'GT', // 'Guatemala',
+		'GG', // 'Guernsey',
+		'GN', // 'Guinea',
+		'GW', // 'Guinea-Bissau',
+		'GY', // 'Guyana',
+		'HT', // 'Haiti',
+		'HM', // 'Heard Island & Mcdonald Islands',
+		'VA', // 'Holy See (Vatican City State)',
+		'HN', // 'Honduras',
+		'HK', // 'Hong Kong',
+		'HU', // 'Hungary',
+		'IS', // 'Iceland',
+		'IN', // 'India',
+		'ID', // 'Indonesia',
+		'IR', // 'Iran, Islamic Republic Of',
+		'IQ', // 'Iraq',
+		'IE', // 'Ireland',
+		'IM', // 'Isle Of Man',
+		'IL', // 'Israel',
+		'IT', // 'Italy',
+		'JM', // 'Jamaica',
+		'JP', // 'Japan',
+		'JE', // 'Jersey',
+		'JO', // 'Jordan',
+		'KZ', // 'Kazakhstan',
+		'KE', // 'Kenya',
+		'KI', // 'Kiribati',
+		'KR', // 'Korea',
+		'KW', // 'Kuwait',
+		'KG', // 'Kyrgyzstan',
+		'LA', // 'Lao People\'s Democratic Republic',
+		'LV', // 'Latvia',
+		'LB', // 'Lebanon',
+		'LS', // 'Lesotho',
+		'LR', // 'Liberia',
+		'LY', // 'Libyan Arab Jamahiriya',
+		'LI', // 'Liechtenstein',
+		'LT', // 'Lithuania',
+		'LU', // 'Luxembourg',
+		'MO', // 'Macao',
+		'MK', // 'Macedonia',
+		'MG', // 'Madagascar',
+		'MW', // 'Malawi',
+		'MY', // 'Malaysia',
+		'MV', // 'Maldives',
+		'ML', // 'Mali',
+		'MT', // 'Malta',
+		'MH', // 'Marshall Islands',
+		'MQ', // 'Martinique',
+		'MR', // 'Mauritania',
+		'MU', // 'Mauritius',
+		'YT', // 'Mayotte',
+		'MX', // 'Mexico',
+		'FM', // 'Micronesia, Federated States Of',
+		'MD', // 'Moldova',
+		'MC', // 'Monaco',
+		'MN', // 'Mongolia',
+		'ME', // 'Montenegro',
+		'MS', // 'Montserrat',
+		'MA', // 'Morocco',
+		'MZ', // 'Mozambique',
+		'MM', // 'Myanmar',
+		'NA', // 'Namibia',
+		'NR', // 'Nauru',
+		'NP', // 'Nepal',
+		'NL', // 'Netherlands',
+		'AN', // 'Netherlands Antilles',
+		'NC', // 'New Caledonia',
+		'NZ', // 'New Zealand',
+		'NI', // 'Nicaragua',
+		'NE', // 'Niger',
+		'NG', // 'Nigeria',
+		'NU', // 'Niue',
+		'NF', // 'Norfolk Island',
+		'MP', // 'Northern Mariana Islands',
+		'NO', // 'Norway',
+		'OM', // 'Oman',
+		'PK', // 'Pakistan',
+		'PW', // 'Palau',
+		'PS', // 'Palestinian Territory, Occupied',
+		'PA', // 'Panama',
+		'PG', // 'Papua New Guinea',
+		'PY', // 'Paraguay',
+		'PE', // 'Peru',
+		'PH', // 'Philippines',
+		'PN', // 'Pitcairn',
+		'PL', // 'Poland',
+		'PT', // 'Portugal',
+		'PR', // 'Puerto Rico',
+		'QA', // 'Qatar',
+		'RE', // 'Reunion',
+		'RO', // 'Romania',
+		'RU', // 'Russian Federation',
+		'RW', // 'Rwanda',
+		'BL', // 'Saint Barthelemy',
+		'SH', // 'Saint Helena',
+		'KN', // 'Saint Kitts And Nevis',
+		'LC', // 'Saint Lucia',
+		'MF', // 'Saint Martin',
+		'PM', // 'Saint Pierre And Miquelon',
+		'VC', // 'Saint Vincent And Grenadines',
+		'WS', // 'Samoa',
+		'SM', // 'San Marino',
+		'ST', // 'Sao Tome And Principe',
+		'SA', // 'Saudi Arabia',
+		'SN', // 'Senegal',
+		'RS', // 'Serbia',
+		'SC', // 'Seychelles',
+		'SL', // 'Sierra Leone',
+		'SG', // 'Singapore',
+		'SK', // 'Slovakia',
+		'SI', // 'Slovenia',
+		'SB', // 'Solomon Islands',
+		'SO', // 'Somalia',
+		'ZA', // 'South Africa',
+		'GS', // 'South Georgia And Sandwich Isl.',
+		'ES', // 'Spain',
+		'LK', // 'Sri Lanka',
+		'SD', // 'Sudan',
+		'SR', // 'Suriname',
+		'SJ', // 'Svalbard And Jan Mayen',
+		'SZ', // 'Swaziland',
+		'SE', // 'Sweden',
+		'CH', // 'Switzerland',
+		'SY', // 'Syrian Arab Republic',
+		'TW', // 'Taiwan',
+		'TJ', // 'Tajikistan',
+		'TZ', // 'Tanzania',
+		'TH', // 'Thailand',
+		'TL', // 'Timor-Leste',
+		'TG', // 'Togo',
+		'TK', // 'Tokelau',
+		'TO', // 'Tonga',
+		'TT', // 'Trinidad And Tobago',
+		'TN', // 'Tunisia',
+		'TR', // 'Turkey',
+		'TM', // 'Turkmenistan',
+		'TC', // 'Turks And Caicos Islands',
+		'TV', // 'Tuvalu',
+		'UG', // 'Uganda',
+		'UA', // 'Ukraine',
+		'AE', // 'United Arab Emirates',
+		'GB', // 'United Kingdom',
+		'US', // 'United States',
+		'UM', // 'United States Outlying Islands',
+		'UY', // 'Uruguay',
+		'UZ', // 'Uzbekistan',
+		'VU', // 'Vanuatu',
+		'VE', // 'Venezuela',
+		'VN', // 'Viet Nam',
+		'VG', // 'Virgin Islands, British',
+		'VI', // 'Virgin Islands, U.S.',
+		'WF', // 'Wallis And Futuna',
+		'EH', // 'Western Sahara',
+		'YE', // 'Yemen',
+		'ZM', // 'Zambia',
+		'ZW', // 'Zimbabwe',
+
+		// Other valid ISRC country codes:
+		'TC', // TuneCore (Digital Services) -- Allocation due to historical irregularity
+		'CP', // International ISRC Agency (reserved for future use)
+		'DG', // International ISRC Agency (ranges allocated as required)
+		'ZZ', // International ISRC Agency individual allocations where reqd
+		'CS', // Allocated to producers in former Serbia & Montenegro (prior to 2006)
+		'YU' // Allocated to producers in former Yugoslavia (prior to 2003)
+	);
+
+	if(strlen($isrc) != 12) return(false);
+    if(!preg_match("/[A-Z]{2}[A-Z0-9]{3}[0-9]{7}/", $isrc)) return(false);
+	if(!in_array(substr($isrc, 0, 2), $country_codes)) return(false);
+
+    return true;
+}
+
 function decode_date($str)
 {
 	if(trim($str) == false) return(false);
@@ -123,15 +403,15 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 	if(isset($rec['CWR_Version']))	$CWR_Version = $rec['CWR_Version'];
 	$error = false;
 
-/*	foreach($rec as $key => $value)
+	foreach($rec as $key => $value)
 	{
 		if(stristr($key, "IPI")) // check IPI values
 		{
 			if(intval($rec[$key] < 100000000 ))
-				$rec[$key] = 0; // replace temp ID with zero
+				$rec[$key] = ' '; // replace unkown IPIs and temp IDs with spaces
 		}
 	}
-*/
+
 	switch($rec['Record_Type'])
 	{
 		case 'HDR':
@@ -299,7 +579,7 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 							'Agreement_Type' => 2,
 							'USA_License_Ind' => 1 ));
 			
-			$data = sprintf("%19s%02d%09d%-45s%1s%-2s%09d%011d%14s%03d%05d%03d%05d%03d%05d%1s%1s%1s%013d%14s%14s%2s%1s",
+			$data = sprintf("%19s%02d%09d%-45s%1s%-2s%09d%-11s%14s%03d%05d%03d%05d%03d%05d%1s%1s%1s%-13s%14s%14s%2s%1s",
 						record_prefix($rec['Record_Type'], $Transaction_Sq, $Record_Sq),
 						$rec['Publisher_Sequence_Number'],
 						$rec['Interested_Party_Number'],
@@ -407,7 +687,7 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 								'USA_License_Ind' => 1));
 
 //			$data = sprintf("%19s%09d%-45s%-30s%1s%-2s%09s%011d%03d%05d%03d%05d%03d%05d%1s%1s%1s%1s%-13s%012d%1s",
-			$data = sprintf("%19s%9s%-45s%-30s%1s%-2s%09s%011d%03d%05d%03d%05d%03d%05d%1s%1s%1s%1s%-13s%012d%1s",
+			$data = sprintf("%19s%9s%-45s%-30s%1s%-2s%09s%-11s%03d%05d%03d%05d%03d%05d%1s%1s%1s%1s%-13s%012d%1s",
 						record_prefix($rec['Record_Type'], $Transaction_Sq, $Record_Sq),
 						$rec['Interested_Party_Number'], // submitter's number -- not the same as IPI
 						$rec['Writer_Last_Name'],
@@ -502,7 +782,7 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 								'Performing_Artist_CAE_IPI_Name_Number' => 11,
 								'Performing_Artist_IPI_Base_Number' => 13));
 
-			$data = sprintf("%19s%-45s%-30s%011d%-13s",
+			$data = sprintf("%19s%-45s%-30s%-11s%-13s",
 						record_prefix($rec['Record_Type'], $Transaction_Sq, $Record_Sq),
 						$rec['Performing_Artist_Last_Name'],
 						$rec['Performing_Artist_First_Name'],
@@ -531,7 +811,7 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 						'Writer_2_IPI_Base_Number' => 13,
 						'Submitter_Work_ID' => 14));
 
-			$data = sprintf("%-60s%011d%2s%-45s-30s-60s%011d%013d%-45s%-30s%011d%013d%-14s",
+			$data = sprintf("%-60s%-11s%2s%-45s-30s-60s%-11s%-13s%-45s%-30s%-11s%-13s%-14s",
 						$rec['Original_Work_Title'],
 						$rec['ISWC_of_Original_Work'],
 						$rec['Language_Code'],
@@ -563,7 +843,13 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 							'Recording_Technique' => 1,
 							'Media_Type' => 3));
 
-			$data = sprintf("%19s%8s%-60s%6s%5s%-60s%-60s%-18s%013s%-12s%1s%1s%-3s",
+			if(is_valid_isrc($rec['ISRC'])) $rec['ISRC_Validity'] = 'Y';
+			else $rec['ISRC_Validity'] = 'N';
+
+			if(strlen($rec['EAN']) == 12) $rec['EAN'] = '0'.$rec['EAN']; // Convert 12-digit UPC to 13-digit EAN
+			if(!verifycheckdigit($rec['EAN'])) $rec['EAN'] = ''; // Replace invalid EANs with spaces
+
+			$data = sprintf("%19s%8s%-60s%6s%5s%-60s%-60s%-18s%-13s%-12s%1s%1s%-3s",
 						record_prefix($rec['Record_Type'], $Transaction_Sq, $Record_Sq),
 						$rec['First_Release_Date'],
 						' ', // Constant
