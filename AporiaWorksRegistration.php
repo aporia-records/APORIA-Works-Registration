@@ -1598,8 +1598,8 @@ class WorksRegistration {
 								case 'ES': //	Substituted Publisher	A publisher acting on behalf of publisher or sub-publisher.
 								case 'E': //publishers
 								{
-									// Only include active publishers
-									if($shareholder['PR_Ownership_Share']+$shareholder['MR_Ownership_Share'] > 0)
+									// Only include active publishers with either ownership or collection rights
+									if(($shareholder['PR_Ownership_Share']+$shareholder['MR_Ownership_Share'] > 0) || (!empty($shareholder['TIS']) && count($shareholder['TIS']) > 0))
 										$publisher[] = $this->getShareDetails();
 
 									break;
