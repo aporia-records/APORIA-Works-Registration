@@ -21,6 +21,19 @@
 	along with APORIA Works Registration.  If not, see <http://www.gnu.org/licenses/>.
 
 */
+/*
+
+v1.43
+
+updates:
+validateWork(): now checks the Text Music Relationship for a valid entry, replaces invalid entries with spaces
+cwr_lib.php: error messages now added to the messages array, rather than displayed via printf()
+
+bug fixes:
+cwr_lib.php: leading zeros were removed from IPI Name numbers after the last update -- now fixed
+writeCWR(): now fails if Submitter Name is missing in the shareholders array
+
+*/
 
 require("cwr-lib.php");
 
@@ -514,6 +527,12 @@ class WorksRegistration {
 				$this->Msgs[] = "ALT: A language Code Must be entered if the Title Type is equal to 'OL' or 'AL'.";
 				return(false);
 			}
+		}
+
+		if(!in_array($work['Text_Music_Relationship'], array('MUS', 'MTX', 'TXT', 'MTN', '')))
+		{
+			$this->Msgs[] = "Text Music Relationship entered was not found in the Text Music Relationship table - replaced with spaces";
+			$work['Text_Music_Relationship'] = '';
 		}
 
 		// Match Works to Tracks
@@ -1364,6 +1383,11 @@ class WorksRegistration {
 		if(empty($this->submitter_code) || empty($this->submitter_ipi))
 		{
 			$this->Msgs[] = "CANNOT GENERATE CWR!\nSubmitter code or IPI not supplied.";
+			return(false);
+		}
+		if(!array_key_exists($this->submitter_ipi, $this->Shareholders))
+		{
+			$this->Msgs[] = "CANNOT GENERATE CWR!\nSubmitter Name not supplied - use addShareholder() to include it.";
 			return(false);
 		}
 

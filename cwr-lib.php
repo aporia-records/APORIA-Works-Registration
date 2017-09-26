@@ -405,10 +405,10 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 
 	foreach($rec as $key => $value)
 	{
-		if(stristr($key, "IPI")) // check IPI values
+		if(stristr($key, "IPI_Name")) // check IPI Name number values
 		{
-			if(intval($rec[$key] < 100000000 ))
-				$rec[$key] = ' '; // replace unkown IPIs and temp IDs with spaces
+			if(intval($rec[$key] < 100000000 )) $rec[$key] = ' '; // replace unkown IPIs and temp IDs with spaces
+			else $rec[$key] = sprintf("%011d", $rec[$key]); // Add leading zeros
 		}
 	}
 
@@ -968,12 +968,12 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 
 		default:
 		{
-			printf("Unsupported record type '%s'.\n", $rec['Record_Type']);
+			$msgs[] = sprintf("(Txn %d, Seq %d): Unsupported record type '%s'.\n", $Transaction_Sq, $Record_Sq, $rec['Record_Type']);
 			$data = "";
 		}
 	}
 	
-	if($error) $msgs[] = sprintf("%s (Txn %d, Sq %d): %s", $rec['Record_Type'], $Transaction_Sq, $Record_Sq, $error);
+	if($error) $msgs[] = sprintf("%s (Txn %d, Seq %d): %s", $rec['Record_Type'], $Transaction_Sq, $Record_Sq, $error);
 	if(!empty($data)) $data .= "\r\n"; /* Added CR \r at the request of CMRRA */
 
 	return($data);
@@ -1375,7 +1375,7 @@ function decode_cwr($rec)
 	}
 
 	/* Clean up CWR data: */
-	if(!is_array($data)) printf("ERROR:  CWR entry not decoded for type '%s', strlen = %d\nRecord = %s\nDecode String = %s\n\n", substr($rec, 0, 3), strlen($rec), $rec, $data);
+	if(!is_array($data)) $msgs[] = sprintf("ERROR:  CWR entry not decoded for type '%s', strlen = %d\nRecord = %s\nDecode String = %s\n\n", substr($rec, 0, 3), strlen($rec), $rec, $data);
 	else
 	foreach($data as $key => $value)
 	{
