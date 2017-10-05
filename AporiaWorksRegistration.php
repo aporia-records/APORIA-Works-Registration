@@ -21,19 +21,6 @@
 	along with APORIA Works Registration.  If not, see <http://www.gnu.org/licenses/>.
 
 */
-/*
-
-v1.43
-
-updates:
-validateWork(): now checks the Text Music Relationship for a valid entry, replaces invalid entries with spaces
-cwr_lib.php: error messages now added to the messages array, rather than displayed via printf()
-
-bug fixes:
-cwr_lib.php: leading zeros were removed from IPI Name numbers after the last update -- now fixed
-writeCWR(): now fails if Submitter Name is missing in the shareholders array
-
-*/
 
 require("cwr-lib.php");
 
@@ -43,7 +30,7 @@ class WorksRegistration {
 	const Name		= "APORIA Works Registration";
 
 	// Version/revision of this class
-	const Version	= 1.42;
+	const Version	= 1.44;
 
 	// bitmasks for registration groups/transaction types
 	const CWR_NWR	= 1;
@@ -111,7 +98,7 @@ class WorksRegistration {
 
 /* Callback functions */
 	public $callback_find_unknown_writer = null; // should return an ID if the unknown writer is already in the database
-	public $callback_check_ipi = null; // check if the IPI is valid/exists in the IPI database
+	public $callback_lookup_ipi = null; // check if the IPI is valid/exists in the IPI database
 
 /**
  TIS Rewrite Rules:
@@ -119,7 +106,7 @@ class WorksRegistration {
 **/
 	public $TISrewrite = false;
 	public $TISrewrite_rules = array(
-		'88' => array('CA')
+//		'88' => array('CA')
 	);
 
 	function __construct($submitter_code, $submitter_ipi)
@@ -446,6 +433,15 @@ class WorksRegistration {
 
 		if(is_array($data))
 		{
+			// Collection values should be zero if this territory is being excluded - added in v1.44
+			if($data['Indicator'] == 'E')
+			{
+				$data['PR_Collection_Share'] = 0;
+				$data['MR_Collection_Share'] = 0;
+				$data['SR_Collection_Share'] = 0;
+			}
+
+			// Insert values into this share's TIS array
 			foreach($data as $key => $value)
 				$this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS][$key] = trim($value);
 
@@ -649,14 +645,15 @@ class WorksRegistration {
 
 			$ipi = intval($shareholder['IPI']);
 			
-		    if($ipi < 100000000 && $this->Shareholders[$ipi]['Controlled']=='Y')
+		    if(!is_valid_ipi_name(sprintf("%011d", $ipi)) && $this->Shareholders[$ipi]['Controlled']=='Y')
 			{
-				$this->Msgs[] = sprintf("Validation failed: invalid IPI number for controlled writer %s (%09d).", $this->Shareholders[$ipi]['Name']." ".$this->Shareholders[$ipi]['First_Name'], $shareholder['IPI']);
+				printf("%d\n", calculateModulo101CheckSum(sprintf("%011d", $ipi)));
+				$this->Msgs[] = sprintf("Validation failed: invalid IPI number for controlled writer %s (%011d).", $this->Shareholders[$ipi]['Name']." ".$this->Shareholders[$ipi]['First_Name'], $shareholder['IPI']);
 				return(false);
 			}
-			else if(is_callable($this->callback_check_ipi))
+			else if(is_callable($this->callback_lookup_ipi))
 			{
-				if(! $this->callback_check_ipi($ipi))
+				if(! $this->callback_lookup_ipi($ipi))
 				{
 					$this->Msgs[] = sprintf("Validation failed: IPI number for controlled writer %s (%09d) not found in database.", $this->Shareholders[$ipi]['Name']." ".$this->Shareholders[$ipi]['First_Name'], $shareholder['IPI']);
 					return(false);
@@ -696,6 +693,46 @@ class WorksRegistration {
 				}
 				
 			}
+
+			// Check if collection shares are within range for publisher role types
+			switch($shareholder['Role'])
+			{
+				/* Publishers: */
+				case 'AQ': //	Acquirer	A publisher that acquires some or all of the ownership from an Original Publisher, but yet the Original Publisher still controls the work.
+				case 'AM': //	Administrator	An interested party that collects royalty payments on behalf of a publisher that it represents.
+				case 'ES': //	Substituted Publisher	A publisher acting on behalf of publisher or sub-publisher.
+				case 'E':  //	publishers
+				case 'SE': // 	Sub-publishers
+				{
+					foreach($this->Works[$this->CurrentWork]['Share'][$this->CurrentShare]['TIS'] as $ter => $territory)
+					{
+						if($territory['Indicator'] == 'I' && $territory['PR_Collection_Share'] + $territory['MR_Collection_Share'] + $territory['SR_Collection_Share'] == 0)
+						{
+							$this->Msgs[] = sprintf("SPT001: The Inclusion/Exclusion Indicator was entered as 'I' but PR Collection Share, MR Collection Share, and SR Collection Share were all zero (TIS %03d)", $ter);
+							return(false);
+						}
+
+						if($territory['PR_Collection_Share'] > 50)
+						{
+							$this->Msgs[] = sprintf("SPT006: PR Collection Share was not in the range 0-50%% (TIS %03d)", $ter);
+							return(false);
+						}
+						if($territory['MR_Collection_Share'] > 100.06)
+						{
+							$this->Msgs[] = sprintf("SPT007: MR Collection Share was not in the range 0-100%% (TIS %03d)", $ter);
+							return(false);
+						}
+						if($territory['SR_Collection_Share'] > 100.06)
+						{
+							$this->Msgs[] = sprintf("SPT008: SR Collection Share was not in the range 0-100%% (TIS %03d)", $ter);
+							return(false);
+						}
+					}
+					break;
+				}
+			}
+
+			// Count shareholder role types
 			switch($shareholder['Role'])
 			{
 				/* Publishers: */
@@ -784,22 +821,22 @@ class WorksRegistration {
 		/* Check collection totals */
 		foreach($territory_totals as $ter => $territory_total)
 		{
-				if($territory_total['PR_Collection_Share'] > 100.06)
-				{
-					$this->Msgs[] = sprintf("PR Collection shares exceed 100%% (+/- 0.6%%) in territory '%s'.", $ter);
-					return(false);
-				}
-				if($territory_total['MR_Collection_Share'] > 100.06)
-				
-				{
-					$this->Msgs[] = sprintf("MR Collection shares exceed 100%% (+/- 0.6%%) in territory '%s'.", $ter);
-					return(false);
-				}
-				if($territory_total['SR_Collection_Share'] > 100.06)
-				{
-					$this->Msgs[] = sprintf("SR Collection shares exceed 100%% (+/- 0.6%%) in territory '%s'.", $ter);
-					return(false);
-				}
+			if($territory_total['PR_Collection_Share'] > 100.06)
+			{
+				$this->Msgs[] = sprintf("PR Collection shares exceed 100%% (+/- 0.6%%) in territory '%s'.", $ter);
+				return(false);
+			}
+			if($territory_total['MR_Collection_Share'] > 100.06)
+			
+			{
+				$this->Msgs[] = sprintf("MR Collection shares exceed 100%% (+/- 0.6%%) in territory '%s'.", $ter);
+				return(false);
+			}
+			if($territory_total['SR_Collection_Share'] > 100.06)
+			{
+				$this->Msgs[] = sprintf("SR Collection shares exceed 100%% (+/- 0.6%%) in territory '%s'.", $ter);
+				return(false);
+			}
 		}
 		return(true);
 	}
@@ -951,7 +988,7 @@ class WorksRegistration {
 		return($ipi);
 	}
 
-	function addPerformer($lastname, $firstname = '', $ipi = 0, $ipibase = 0)
+	function addPerformer($lastname, $firstname = '', $ipi = 0, $ipibase = '')
 	{
 		$found = false;
 		$i = 0;
@@ -963,6 +1000,8 @@ class WorksRegistration {
 			else if($performer['Last_Name'].$performer['First_Name'] == $lastname.$firstname) $found = $i;
 			$i++;
 		}
+
+		if(!is_valid_ipi_base($ipibase)) $ipibase = ''; // Replace invalid IPI Base Numbers with blanks
 
 		if($found == false)
 		{
@@ -2255,7 +2294,7 @@ class WorksRegistration {
 
 						$this->addShareholder(array(
 							'IPI'						=> $record['Interested_Party_Number'],
-							'Name'					=> $record['Publisher_Name'],
+							'Name'						=> $record['Publisher_Name'],
 							'First_Name'				=> '', // First_Name is left blank for publishers
 							'PRO'						=> $record['PR_Society'],
 							'MRO'						=> $record['MR_Society'],

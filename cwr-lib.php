@@ -27,6 +27,12 @@
 define("EDI_Version", "01.10");
 define("CWR_Version", "02.10"); // CWR2.1
 
+/* Required by the calculateModulo101CheckSum() function for validating IPI numbers */
+define("MODULUS_101", 101);
+define("SPECIAL_CASE", 0);
+define("DEFAULT_CHECK_SUM", 0);
+
+
 /*	UPC and EAN-13 check digit validator
 	Apr 24, 2009
 	This code is licensed for use under the LGPLv3
@@ -36,9 +42,83 @@ define("CWR_Version", "02.10"); // CWR2.1
 	If you end up using this function in your application, a note in the credits would be appreciated ;)
 	No error checking is performed; expects a 12 or 13 digit code only. Returns TRUE if the check digit in the UPC or EAN-13 code is correct, FALSE otherwise.
 */
-	function verifycheckdigit($val) {
-		return ((((ceil(($a=((strlen($val)==12)?((($val[0]+$val[2]+$val[4]+$val[6]+$val[8]+$val[10])*3)+($val[1]+$val[3]+$val[5]+$val[7]+$val[9])):(($val[0]+$val[2]+$val[4]+$val[6]+$val[8]+$val[10])+(($val[1]+$val[3]+$val[5]+$val[7]+$val[9]+$val[11])*3))))/10))*10-$a)==substr($val,-1,1))?TRUE:FALSE);
+function verifycheckdigit($val)
+{
+	return ((((ceil(($a=((strlen($val)==12)?((($val[0]+$val[2]+$val[4]+$val[6]+$val[8]+$val[10])*3)+($val[1]+$val[3]+$val[5]+$val[7]+$val[9])):(($val[0]+$val[2]+$val[4]+$val[6]+$val[8]+$val[10])+(($val[1]+$val[3]+$val[5]+$val[7]+$val[9]+$val[11])*3))))/10))*10-$a)==substr($val,-1,1))?TRUE:FALSE);
+}
+
+/**
+ * Luhn algorithm validity check, sourced from the wikipedia article (https://en.wikipedia.org/wiki/Luhn_algorithm)
+ *
+ */
+function checkLuhn($number)
+{
+	$sum = 0;
+	$numDigits = strlen($number);
+	$parity = $numDigits % 2;
+	for ($i = 0; $i < $numDigits; $i++)
+	{
+		$digit = substr($number, $i, 1);
+		if ($parity == ($i % 2))
+		{
+			$digit <<= 1;
+			if (9 < $digit) $digit = $digit - 9;
+		}
+		$sum += intval($digit);
 	}
+	return (0 == ($sum % 10));
+}
+
+/**
+ * Adapted from Java code provided by Peter Klauser @ SUISA
+ *
+ * @param nineDigitNumber
+ *			string of digits, in the most cases it's the id
+ */
+function calculateModulo101CheckSum($nineDigitNumber)
+{
+	$sum = 0;
+	$subStringCounter = 0;
+
+	for ($i = 10; $i > 1; $i--)
+	{
+		$digit = substr($nineDigitNumber, $subStringCounter, 1);
+		$newDigit = $digit * $i;
+		$sum += $newDigit;
+		$subStringCounter++;
+	}
+
+	$checkSum = $sum % MODULUS_101;
+	if ($checkSum != 0)
+	{
+		if ($checkSum == SPECIAL_CASE) return(DEFAULT_CHECK_SUM);
+		$checkSum = MODULUS_101 - $checkSum;
+	}
+	return(sprintf("%02d", $checkSum));
+}
+
+function is_valid_ipi_name($ipi)
+{
+	if(strlen($ipi) != 11 || !preg_match("/[0-9]{11}/", $ipi)) return(false);
+	if($ipi != substr($ipi, 0, 9).calculateModulo101CheckSum($ipi)) {printf("%s\n", substr($ipi, 0, 9).calculateModulo101CheckSum($ipi)); return(false);}
+
+	return(true);
+}
+
+function is_valid_ipi_base($ipibase)
+{
+	if(strlen($ipibase != 13) || !preg_match("/I-[0-9]{9}-[0-9]/", $ipibase)) return(false);
+
+	return(true);
+}
+
+function is_valid_iswc($iswc)
+{
+	if(!preg_match("/T[0-9]{10}/", $iswc)) return(false);
+	if(!checkLuhn($iswc)) return(false);
+
+	return(true);
+}
 
 function is_valid_isrc($isrc)
 {
@@ -407,8 +487,13 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 	{
 		if(stristr($key, "IPI_Name")) // check IPI Name number values
 		{
-			if(intval($rec[$key] < 100000000 )) $rec[$key] = ' '; // replace unkown IPIs and temp IDs with spaces
-			else $rec[$key] = sprintf("%011d", $rec[$key]); // Add leading zeros
+			$rec[$key] = sprintf("%011d", $rec[$key]); // Add leading zeros if missing
+			if(!is_valid_ipi_name($rec[$key])) $rec[$key] = ' '; // replace invalid/unkown IPI Name Numbers and/or temp IDs with spaces
+		}
+
+		if(stristr($key, "IPI_Base")) // Check IPI Base Number values
+		{
+			if(!is_valid_ipi_base($rec[$key])) $rec[$key] = ''; // replace invalid/unkown IPI Base Numbers and temp IDs with spaces
 		}
 	}
 
