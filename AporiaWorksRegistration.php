@@ -30,7 +30,7 @@ class WorksRegistration {
 	const Name		= "APORIA Works Registration";
 
 	// Version/revision of this class
-	const Version	= 1.44;
+	const Version	= 1.45;
 
 	// bitmasks for registration groups/transaction types
 	const CWR_NWR	= 1;
@@ -462,8 +462,8 @@ class WorksRegistration {
 				+	$this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['MR_Collection_Share']
 				+	$this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['SR_Collection_Share'] == 0)) 
 			{
-				$ipi =& $this->Works[$this->CurrentWork]['Share'][$this->CurrentShare]['IPI'];
-				$this->Msgs[] = sprintf("addTerritory: PR Collection Share, MR Collection Share, and SR Collection Share cannot all be zero for IPI %09d.", $ipi);
+				$ip_number =& $this->Works[$this->CurrentWork]['Share'][$this->CurrentShare]['IP_Number'];
+				$this->Msgs[] = sprintf("addTerritory: PR Collection Share, MR Collection Share, and SR Collection Share cannot all be zero for Interested Party number %d.", $ip_number);
 				return(false);
 			}
 
@@ -479,8 +479,8 @@ class WorksRegistration {
 	{
 		foreach($this->Works[$this->CurrentWork]['Share'] as $shareKey => $share)
 		{
-			$ipi = intval($share['IPI']);
-			if($this->Shareholders[$ipi]['Controlled']=='Y') $this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByControl']=1;
+			$ip_number = intval($share['IP_Number']);
+			if($this->Shareholders[$ip_number]['Controlled']=='Y') $this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByControl']=1;
 			else $this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByControl']=0;
 
 			$sortByControl[$shareKey] = $this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByControl'];
@@ -643,19 +643,21 @@ class WorksRegistration {
 		{
 			$shareholder = $this->getShareDetails();
 
-			$ipi = intval($shareholder['IPI']);
+			$ip_number = intval($shareholder['IP_Number']);
+
+			$ipi_name_number = $this->Shareholders[$ip_number]['IPI_Name_Number'];
 			
-		    if(!is_valid_ipi_name(sprintf("%011d", $ipi)) && $this->Shareholders[$ipi]['Controlled']=='Y')
+		    if(!is_valid_ipi_name(sprintf("%011d", $ipi_name_number)) && $this->Shareholders[$ip_number]['Controlled']=='Y')
 			{
-				printf("%d\n", calculateModulo101CheckSum(sprintf("%011d", $ipi)));
-				$this->Msgs[] = sprintf("Validation failed: invalid IPI number for controlled writer %s (%011d).", $this->Shareholders[$ipi]['Name']." ".$this->Shareholders[$ipi]['First_Name'], $shareholder['IPI']);
+				printf("%d\n", calculateModulo101CheckSum(sprintf("%011d", $ipi_name_number)));
+				$this->Msgs[] = sprintf("Validation failed: invalid IPI number for controlled writer %s (%011d).", $this->Shareholders[$ip_number]['Name']." ".$this->Shareholders[$ip_number]['First_Name'], $ipi_name_number);
 				return(false);
 			}
 			else if(is_callable($this->callback_lookup_ipi))
 			{
-				if(! $this->callback_lookup_ipi($ipi))
+				if(! $this->callback_lookup_ipi($ipi_name_number))
 				{
-					$this->Msgs[] = sprintf("Validation failed: IPI number for controlled writer %s (%09d) not found in database.", $this->Shareholders[$ipi]['Name']." ".$this->Shareholders[$ipi]['First_Name'], $shareholder['IPI']);
+					$this->Msgs[] = sprintf("Validation failed: IPI number for controlled writer %s (%09d) not found in database.", $this->Shareholders[$ip_number]['Name']." ".$this->Shareholders[$ip_number]['First_Name'], $ipi_name_number);
 					return(false);
 				}
 			}
@@ -687,7 +689,7 @@ class WorksRegistration {
 
 					if($collection_total == 0)
 					{
-						$this->Msgs[] = sprintf("Validation failed: PR Collection Share, MR Collection Share, and SR Collection Share are all zero for %s (%09d).", $this->Shareholders[$ipi]['Name']." ".$this->Shareholders[$ipi]['First_Name'], $shareholder['IPI']);
+						$this->Msgs[] = sprintf("Validation failed: PR Collection Share, MR Collection Share, and SR Collection Share are all zero for %s (%09d).", $this->Shareholders[$ip_number]['Name']." ".$this->Shareholders[$ip_number]['First_Name'], $shareholder['IPI_Name_Number']);
 						return(false);
 					}
 				}
@@ -757,7 +759,7 @@ class WorksRegistration {
 				case 'CA': // Composer/Author	The creator or one of the creators of text and musical elements within a musical work.
 				{
 					$writers++;
-					if($this->Shareholders[$ipi]['Controlled']=='Y') $controlled_writers++;
+					if($this->Shareholders[$ip_number]['Controlled']=='Y') $controlled_writers++;
 					break;
 				}
 
@@ -851,8 +853,8 @@ class WorksRegistration {
 
 		foreach($shares as $shareholder)
 		{
-			$ipi = $shareholder['IPI'];
-			if($this->Shareholders[$ipi]['Controlled'] == 'Y') $percentageControlled += $shareholder['PR_Ownership_Share'];
+			$ip_number = $shareholder['IP_Number'];
+			if($this->Shareholders[$ip_number]['Controlled'] == 'Y') $percentageControlled += $shareholder['PR_Ownership_Share'];
 		}
 
 		return($percentageControlled);
@@ -934,61 +936,64 @@ class WorksRegistration {
 
 	function addShareholder($data)
 	{
-		if(!is_array($data) && !isset($data['IPI']))
+		if(!is_array($data) && !isset($data['IP_Number']))
 		{
 			$this->Msgs[] = "addShareholder() - requires data in array form.  IPI is mandatory.";
 			return(false);
 		}
-		$ipi = intval($data['IPI']);
+		$ip_number = intval($data['IP_Number']);
 
-		if(!array_key_exists ($ipi, $this->Shareholders)) // Skip this entry if it already exists
+		if(!array_key_exists ($ip_number, $this->Shareholders)) // Skip this entry if it already exists
 		{
 			if((count($data) > 5))
 			{
-				if($ipi < 100000000) $this->Msgs[] = sprintf("Warning: unidentified party %s (Temp IPI '%d' will be replaced with spaces)", $data['Name']." ".$data['First_Name'], $ipi);
+//				if($ip_number < 100000000) $this->Msgs[] = sprintf("Warning: unidentified party %s (Temp IPI '%d' will be replaced with spaces)", $data['Name']." ".$data['First_Name'], $ipi);
 
-				$this->Shareholders[$ipi]['Name'] 		= $data['Name'];
-				$this->Shareholders[$ipi]['First_Name']	= $data['First_Name'];
-				$this->Shareholders[$ipi]['Controlled'] = $data['Controlled'];
-				$this->Shareholders[$ipi]['US_Rep'] 	= $data['US_Rep'];
+				$this->Shareholders[$ip_number]['Name'] 		= $data['Name'];
+				$this->Shareholders[$ip_number]['First_Name']	= $data['First_Name'];
+				$this->Shareholders[$ip_number]['Controlled'] 	= $data['Controlled'];
+				$this->Shareholders[$ip_number]['US_Rep'] 		= $data['US_Rep'];
 
-				if(!empty($data['PRO'])) $this->Shareholders[$ipi]['PRO'] = $data['PRO'];
-				else $this->Shareholders[$ipi]['PRO'] = 99; // Defaul to No Society if none is declared
+				if(!empty($data['IPI_Name_Number'])) $this->Shareholders[$ip_number]['IPI_Name_Number'] = $data['IPI_Name_Number'];
+				else $this->Shareholders[$ip_number]['IPI_Name_Number'] = ''; // No IPI Name Number - default to spaces
 
-				if(!empty($data['MRO'])) $this->Shareholders[$ipi]['MRO'] = $data['MRO'];
-				else $this->Shareholders[$ipi]['MRO'] = 99; // Defaul to No Society if none is declared
+				if(!empty($data['PRO'])) $this->Shareholders[$ip_number]['PRO'] = $data['PRO'];
+				else $this->Shareholders[$ip_number]['PRO'] = 99; // Defaul to No Society if none is declared
+
+				if(!empty($data['MRO'])) $this->Shareholders[$ip_number]['MRO'] = $data['MRO'];
+				else $this->Shareholders[$ip_number]['MRO'] = 99; // Defaul to No Society if none is declared
 				
-				if(!empty($data['SRO'])) $this->Shareholders[$ipi]['SRO'] = $data['SRO'];
-				else $this->Shareholders[$ipi]['SRO'] = 99; // Defaul to No Society if none is declared
+				if(!empty($data['SRO'])) $this->Shareholders[$ip_number]['SRO'] = $data['SRO'];
+				else $this->Shareholders[$ip_number]['SRO'] = 99; // Defaul to No Society if none is declared
 
 				return(true);
 			}
-			else $this->Msgs[] = sprintf("Insufficient data in shareholders table! (ipi: %d)", $ipi);
+			else $this->Msgs[] = sprintf("Insufficient data in shareholders table! (Interested Party number: %d)", $ip_number);
 			return(false);	
 		}
 		else return(true);
 	}
 
-	function tempIPI($lastname, $firstname, $pro)
+	function tempIPnumber($lastname, $firstname, $pro)
 	{
-		$ipi = false;
-		$temp_ipi = array();
+		$ip_number = false;
+		$temp_ip_number = array();
 
-		if(is_callable($this->callback_find_unknown_writer)) $ipi = $this->callback_find_unknown_writer($lastname, $firstname, $pro);
+		if(is_callable($this->callback_find_unknown_writer)) $ip_number = $this->callback_find_unknown_writer($lastname, $firstname, $pro);
 
-		if($ipi == false)
+		if($ip_number == false)
 		{
 			foreach($this->Shareholders as $writer)
 			{
-				if($writer['IPI'] < 100000000 ) $temp_ipi[] = $writer['IPI'];
-				if($writer['Name'].'/'.$writer['First_Name'].'/'.$writer['PRO'] == $lastname.'/'.$firstname.'/'.$pro) $ipi = $writer['IPI'];
+				if($writer['IP_Number'] < 100000000 ) $temp_ip_number[] = $writer['IP_Number'];
+				if($writer['Name'].'/'.$writer['First_Name'].'/'.$writer['PRO'] == $lastname.'/'.$firstname.'/'.$pro) $ip_number = $writer['IP_Number'];
 			}
-			$ipi = max($temp_ipi) + 1;
+			$ip_number = max($temp_ip_number) + 1;
 		}
-		return($ipi);
+		return($ip_number);
 	}
 
-	function addPerformer($lastname, $firstname = '', $ipi = 0, $ipibase = '')
+	function addPerformer($lastname, $firstname = '', $ipi_name_number = 0, $ipi_base_number = '')
 	{
 		$found = false;
 		$i = 0;
@@ -996,20 +1001,20 @@ class WorksRegistration {
 		while($i < count($this->Performers) && !$found)
 		{
 			$performer =& $this->Performers[$i];
-			if($ipi > 0 && $performer['IPI'] == $ipi) $found = $i;
+			if($ipi_name_number > 0 && $performer['IPI_Name_Number'] == $ipi_name_number) $found = $i;
 			else if($performer['Last_Name'].$performer['First_Name'] == $lastname.$firstname) $found = $i;
 			$i++;
 		}
 
-		if(!is_valid_ipi_base($ipibase)) $ipibase = ''; // Replace invalid IPI Base Numbers with blanks
+		if(!is_valid_ipi_base($ipi_base_number)) $ipi_base_number = ''; // Replace invalid IPI Base Numbers with blanks
 
 		if($found == false)
 		{
 			$this->Performers[] = array(
-				'Last_Name'	=> $lastname,
-				'First_Name'=> $firstname,
-				'IPI'		=> $ipi,
-				'IPI_base'	=> $ipibase);
+				'Last_Name'			=> $lastname,
+				'First_Name'		=> $firstname,
+				'IPI_Name_Number'	=> $ipi_name_number,
+				'IPI_base'			=> $ipi_base_number);
 
 			end($this->Performers);
 			$found = key($this->Performers);
@@ -1202,201 +1207,6 @@ class WorksRegistration {
 /* Generic Works Registration Formats
 /******************************************************/
 
-	function WriteCatalogue($handle)
-	{
-		$csv = array();
-		$x = 0; // CSV row counter
-
-		$headerRow = array(
-			'SONG TITLE' => '',
-			'AKA 1' => '',
-			'COMPOSER 1 FIRST NAME' => '',
-			'COMPOSER 1 SURNAME' => '',
-			'COMPOSER 1 CONTROLLED' => '',
-			'COMPOSER 1 CAPACITY' => '',
-			'COMPOSER 1 CAE NO' => '',
-			'COMPOSER 1 AFFILIATION' => '',
-			'COMPOSER 1 LINKED PUBLISHER' => '',
-			'COMPOSER 2 FIRST NAME' => '',
-			'COMPOSER 2 SURNAME' => '',
-			'COMPOSER 2 CONTROLLED' => '',
-			'COMPOSER 2 CAPACITY' => '',
-			'COMPOSER 2 CAE NO' => '',
-			'COMPOSER 2 AFFILIATION' => '',
-			'COMPOSER 2 LINKED PUBLISHER' => '',
-			'COMPOSER 3 FIRST NAME' => '',
-			'COMPOSER 3 SURNAME' => '',
-			'COMPOSER 3 CONTROLLED' => '',
-			'COMPOSER 3 CAPACITY' => '',
-			'COMPOSER 3 CAE NO' => '',
-			'COMPOSER 3 AFFILIATION' => '',
-			'COMPOSER 3 LINKED PUBLISHER' => '',
-			'COMPOSER 4 FIRST NAME' => '',
-			'COMPOSER 4 SURNAME' => '',
-			'COMPOSER 4 CONTROLLED' => '',
-			'COMPOSER 4 CAPACITY' => '',
-			'COMPOSER 4 CAE NO' => '',
-			'COMPOSER 4 AFFILIATION' => '',
-			'COMPOSER 4 LINKED PUBLISHER' => '',
-			'COMPOSER 5 FIRST NAME' => '',
-			'COMPOSER 5 SURNAME' => '',
-			'COMPOSER 5 CONTROLLED' => '',
-			'COMPOSER 5 CAPACITY' => '',
-			'COMPOSER 5 CAE NO' => '',
-			'COMPOSER 5 AFFILIATION' => '',
-			'COMPOSER 5 LINKED PUBLISHER' => '',
-			'COMPOSER 1 SHARE' => '',
-			'COMPOSER 2 SHARE' => '',
-			'COMPOSER 3 SHARE' => '',
-			'COMPOSER 4 SHARE' => '',
-			'COMPOSER 5 SHARE' => '',
-			'PUBLISHER 1 NAME' => '',
-			'PUBLISHER 1 CONTROLLED' => '',
-			'PUBLISHER 1 CAPACITY' => '',
-			'PUBLISHER 1 CAE NO' => '',
-			'PUBLISHER 1 LINKED PUBLISHER' => '',
-			'PUBLISHER 1 AFFILIATION' => '',
-			'PUBLISHER 2 NAME' => '',
-			'PUBLISHER 2 CONTROLLED' => '',
-			'PUBLISHER 2 CAPACITY' => '',
-			'PUBLISHER 2 CAE NO' => '',
-			'PUBLISHER 2 LINKED PUBLISHER' => '',
-			'PUBLISHER 2 AFFILIATION' => '',
-			'PUBLISHER 3 NAME' => '',
-			'PUBLISHER 3 CONTROLLED' => '',
-			'PUBLISHER 3 CAPACITY' => '',
-			'PUBLISHER 3 CAE NO' => '',
-			'PUBLISHER 3 LINKED PUBLISHER' => '',
-			'PUBLISHER 3 AFFILIATION' => '',
-			'PUBLISHER 4 NAME' => '',
-			'PUBLISHER 4 CONTROLLED' => '',
-			'PUBLISHER 4 CAPACITY' => '',
-			'PUBLISHER 4 CAE NO' => '',
-			'PUBLISHER 4 LINKED PUBLISHER' => '',
-			'PUBLISHER 4 AFFILIATION' => '',
-			'PUBLISHER 5 NAME' => '',
-			'PUBLISHER 5 CONTROLLED' => '',
-			'PUBLISHER 5 CAPACITY' => '',
-			'PUBLISHER 5 CAE NO' => '',
-			'PUBLISHER 5 LINKED PUBLISHER' => '',
-			'PUBLISHER 5 AFFILIATION' => '',
-			'PUBLISHER 1 MO SHARE' => '',
-			'PUBLISHER 1 PO SHARE' => '',
-			'PUBLISHER 2 MO SHARE' => '',
-			'PUBLISHER 2 PO SHARE' => '',
-			'PUBLISHER 3 MO SHARE' => '',
-			'PUBLISHER 3 PO SHARE' => '',
-			'PUBLISHER 4 MO SHARE' => '',
-			'PUBLISHER 4 PO SHARE' => '',
-			'PUBLISHER 5 MO SHARE' => '',
-			'PUBLISHER 5 PO SHARE' => '',
-			'PUBLISHER 1 MC SHARE' => '',
-			'PUBLISHER 1 PC SHARE' => '',
-			'PUBLISHER 2 MC SHARE' => '',
-			'PUBLISHER 2 PC SHARE' => '',
-			'PUBLISHER 3 MC SHARE' => '',
-			'PUBLISHER 3 PC SHARE' => '',
-			'PUBLISHER 4 MC SHARE' => '',
-			'PUBLISHER 4 PC SHARE' => '',
-			'PUBLISHER 5 MC SHARE' => '',
-			'PUBLISHER 5 PC SHARE' => '',
-			'SONG NOTES' => '',
-			'ARTIST' => '',
-			'DURATION' => '',
-			'ISWC' => '',
-			'ISRC' => '',
-			'TITLE LANGUAGE' => '' );
-
-		if(!isset($this->Works)) return(false);
-
-		$this->CurrentWork = 0;
-		while($this->NextWork())
-		{
-			/* Initialize Row */
-			$csv[$x]=$headerRow;
-
-			$Song = $this->getWorkDetails();
-			$csv[$x]['SONG TITLE']			= $Song['Title'];
-			$csv[$x]['AKA 1']				= $Song['Alt_Title'];
-			$csv[$x]['ARTIST']				= $Song['Performer_1'];
-			$csv[$x]['DURATION']			= $Song['Duration'];
-			$csv[$x]['ISWC']	 			= $Song['ISWC'];
-			$csv[$x]['ISRC']	 			= $Song['ISRC'];
-			$csv[$x]['TITLE LANGUAGE']		= $Song['Lang'];
-			$csv[$x]['SONG NOTES']			= '';
-			
-			$pub = 0; // publisher counter
-			$wtr = 0; // writer counter
-
-			$Link_Row = array();
-
-			$this->CurrentShare = 0;
-			while($this->NextShare())
-			{
-				$Shareholder = $this->getShareDetails();
-				$ipi = $Shareholder['IPI'];
-
-				switch($Shareholder['Role'])
-				{
-					case 'A':
-					case 'C':
-					case 'CA':
-					{
-						$composer = sprintf("COMPOSER %1d", $wtr+1);
-					
-						$csv[$x][$composer.' FIRST NAME']			= $this->Shareholders[$ipi]['First_Name'];
-						$csv[$x][$composer.' SURNAME']				= $this->Shareholders[$ipi]['Name'];
-						$csv[$x][$composer.' CONTROLLED']			= $this->Shareholders[$ipi]['Controlled'];
-						$csv[$x][$composer.' CAPACITY']				= $Shareholder['Role'];
-						$csv[$x][$composer.' CAE NO']				= $ipi;
-						$csv[$x][$composer.' AFFILIATION']			= $this->Shareholders[$ipi]['PRO'];
-						$csv[$x][$composer.' LINKED PUBLISHER']		= $Shareholder['Link'];
-
-						$csv[$x][$composer.' SHARE'] 				= sprintf("%03.2f", $Shareholder['PR_Ownership_Share']);
-
-						$wtr++;
-						break;
-					}
-
-					case 'E':
-					case 'SE':
-					{
-						$publisher = sprintf("PUBLISHER %1d", $pub+1);
-
-						$csv[$x][$publisher.' NAME']				= $this->Shareholders[$ipi]['Name'];
-						$csv[$x][$publisher.' CONTROLLED']			= $this->Shareholders[$ipi]['Controlled'];
-						$csv[$x][$publisher.' CAPACITY']			= $Shareholder['Role'];
-						$csv[$x][$publisher.' CAE NO']				= $ipi;
-						
-						$csv[$x][$publisher.' LINKED PUBLISHER']	= $Shareholder['Link'];
-						$csv[$x][$publisher.' AFFILIATION']			= $this->Shareholders[$ipi]['PRO'];
-
-						$csv[$x][$publisher.' MO SHARE']			= sprintf("%03.2f", $Shareholder['MR_Ownership_Share']);
-						$csv[$x][$publisher.' PO SHARE']			= sprintf("%03.2f", $Shareholder['PR_Ownership_Share']);
-						$csv[$x][$publisher.' MC SHARE']			= sprintf("%03.2f", $Shareholder['MR_Collection_Share']);
-						$csv[$x][$publisher.' PC SHARE']			= sprintf("%03.2f", $Shareholder['PR_Collection_Share']);
-
-						$pub++;
-						break;
-					}
-				}
-			}
-
-			$x ++; //advance to next csv row
-		}
-
-		// Print header row
-		fputcsv($handle, array_keys($headerRow));
-
-		// Print array rows to CSV
-		foreach($csv as $row) fputcsv($handle, $row);		
-
-		return($x+1); // Return number of lines written in CSV file
-	}
-
-/******************************************************
-/* CISAC Common Works Registration 
-/******************************************************/
 	function WriteCWR()
 	{	
 		/*
@@ -1674,7 +1484,7 @@ class WorksRegistration {
 										$publisher[] = $this->getShareDetails();
 									else 
 									{
-										$this->Msgs[] = sprintf("NOTICE: Sub-Publisher '%s' has no collection rights in the relevant territorie(s) - removed from CWR.\n", $this->Shareholders[$shareholder['IPI']]['Name']);
+										$this->Msgs[] = sprintf("NOTICE: Sub-Publisher '%s' has no collection rights in the relevant territorie(s) - removed from CWR.\n", $this->Shareholders[$shareholder['IPI_Name_Number']]['Name']);
 									}
 									break;
 								}
@@ -1710,7 +1520,9 @@ class WorksRegistration {
 							$rc++;
 							$group_rc++;
 							$sh++;
-							$ipi = $shareholder['IPI'];
+							$ip_number = $shareholder['IP_Number'];
+
+//							$ipi = $shareholder['IPI_Name_Number'];
 
 							if(empty($shareholder['Link'])) $this->Msgs("No chain of title declared! (work: %s)\n", $work['Title']);
 							$chain = intval($shareholder['Link']);
@@ -1718,30 +1530,31 @@ class WorksRegistration {
 							if($shareholder['Role'] == 'E')
 							{
 //								$original_publisher[$chain] = $ipi;					
-								$original_publisher[$chain][0] = $ipi;
-								$pub_sequence[$ipi] = $chain;
+								$original_publisher[$chain][0] = $ip_number;
+								$pub_sequence[$ip_number] = $chain;
 							}
 
 							if(array_key_exists('coPublisher', $shareholder))
-								$original_publisher[$shareholder['coPublisher']][] = $ipi;
+								$original_publisher[$shareholder['coPublisher']][] = $ip_number;
+//								$original_publisher[$shareholder['coPublisher']][] = $ipi;
 
 							$rec = array(
 								'Publisher_Sequence_Number'		=> $chain,
-								'Interested_Party_Number'		=> $ipi,
-								'Publisher_Name'				=> $this->Shareholders[$ipi]['Name'],
-								'Publisher_CAE_IPI_Name_Number'	=> $ipi,
+								'Interested_Party_Number'		=> $ip_number,
+								'Publisher_Name'				=> $this->Shareholders[$ip_number]['Name'],
+								'Publisher_CAE_IPI_Name_Number'	=> $this->Shareholders[$ip_number]['IPI_Name_Number'],
 								'Publisher_Type'				=> $shareholder['Role'],
 //								'Submitter_Agreement_Number'	=> $shareholder['Agreement_Number'],
-								'PR_Society'					=> $this->Shareholders[$ipi]['PRO'],
+								'PR_Society'					=> $this->Shareholders[$ip_number]['PRO'],
 								'PR_Ownership_Share'			=> $shareholder['PR_Ownership_Share'],
-								'MR_Society'					=> $this->Shareholders[$ipi]['MRO'],
+								'MR_Society'					=> $this->Shareholders[$ip_number]['MRO'],
 								'MR_Ownership_Share'			=> $shareholder['MR_Ownership_Share'],
-								'SR_Society'					=> $this->Shareholders[$ipi]['SRO'],
+								'SR_Society'					=> $this->Shareholders[$ip_number]['SRO'],
 								'SR_Ownership_Share'			=> $shareholder['SR_Ownership_Share'],
-								'USA_License_Ind'				=> substr($this->Shareholders[$ipi]['US_Rep'], 0, 1)
+								'USA_License_Ind'				=> substr($this->Shareholders[$ip_number]['US_Rep'], 0, 1)
 							);
 
-							if($this->Shareholders[$ipi]['Controlled'] == 'Y')
+							if($this->Shareholders[$ip_number]['Controlled'] == 'Y')
 									$rec['Record_Type'] = 'SPU';
 							else 	$rec['Record_Type'] = 'OPU';
 
@@ -1766,7 +1579,7 @@ class WorksRegistration {
 
 									$rec = array(
 										'Record_Type'					=> $spt_opt,
-										'Interested_Party_Number'		=> $ipi,
+										'Interested_Party_Number'		=> $ip_number,
 										'PR_Collection_Share'			=> $territory['PR_Collection_Share'],
 										'MR_Collection_Share'			=> $territory['MR_Collection_Share'],
 										'SR_Collection_Share'			=> $territory['SR_Collection_Share'],
@@ -1787,33 +1600,34 @@ class WorksRegistration {
 							$rc++;
 							$group_rc++;
 							$sh++;
-							$ipi = intval($shareholder['IPI']);
+//							$ipi = intval($shareholder['IPI_Name_Number']);
+							$ip_number = $shareholder['IP_Number'];
 //							$chain = $shareholder['Link'];
 
 							$rec = array(
-								'Interested_Party_Number'		=> $ipi,
-								'Writer_Last_Name'				=> $this->Shareholders[$ipi]['Name'],
-								'Writer_First_Name'				=> $this->Shareholders[$ipi]['First_Name'],
+								'Interested_Party_Number'		=> $ip_number,
+								'Writer_Last_Name'				=> $this->Shareholders[$ip_number]['Name'],
+								'Writer_First_Name'				=> $this->Shareholders[$ip_number]['First_Name'],
 								'Writer_Designation_Code'		=> $shareholder['Role'],
-								'Writer_CAE_IPI_Name_Number'	=> $ipi,
-								'PR_Society'					=> $this->Shareholders[$ipi]['PRO'],
+								'Writer_CAE_IPI_Name_Number'	=> $this->Shareholders[$ip_number]['IPI_Name_Number'],
+								'PR_Society'					=> $this->Shareholders[$ip_number]['PRO'],
 								'PR_Ownership_Share'			=> $shareholder['PR_Ownership_Share'],
-								'MR_Society'					=> $this->Shareholders[$ipi]['MRO'],
+								'MR_Society'					=> $this->Shareholders[$ip_number]['MRO'],
 								'MR_Ownership_Share'			=> $shareholder['MR_Ownership_Share'],
-								'SR_Society'					=> $this->Shareholders[$ipi]['SRO'],
+								'SR_Society'					=> $this->Shareholders[$ip_number]['SRO'],
 								'SR_Ownership_Share'			=> $shareholder['SR_Ownership_Share'],
-								'USA_License_Ind'				=> substr($this->Shareholders[$ipi]['US_Rep'], 0, 1)
+								'USA_License_Ind'				=> substr($this->Shareholders[$ip_number]['US_Rep'], 0, 1)
 							);
 
-							if($this->Shareholders[$ipi]['Controlled'] == 'Y')
+							if($this->Shareholders[$ip_number]['Controlled'] == 'Y')
 									$rec['Record_Type'] = 'SWR';
 							else 	$rec['Record_Type'] = 'OWR';
 
-							if($ipi < 100000000  && $this->Shareholders[$ipi]['Controlled']=='N') // Remove SOCAN temp IPIs from OWR records
-							{
-							    $rec['Interested_Party_Number']        = '';
-							    $rec['Writer_CAE_IPI_Name_Number']    = '';
-							}
+//							if($ipi < 100000000  && $this->Shareholders[$ipi]['Controlled']=='N') // Remove SOCAN temp IPIs from OWR records
+//							{
+//							    $rec['Interested_Party_Number']        = '';
+//							    $rec['Writer_CAE_IPI_Name_Number']    = '';
+//							}
 							$cwr .= encode_cwr($this->Msgs, $rec, $group_tx, $sq);
 
 							$territory_sq = 0;
@@ -1832,7 +1646,7 @@ class WorksRegistration {
 
 									$rec = array(
 										'Record_Type'					=> $swt_owt,
-										'Interested_Party_Number'		=> $ipi,
+										'Interested_Party_Number'		=> $ip_number,
 										'PR_Collection_Share'			=> $territory['PR_Collection_Share'],
 										'MR_Collection_Share'			=> $territory['MR_Collection_Share'],
 										'SR_Collection_Share'			=> $territory['SR_Collection_Share'],
@@ -1846,9 +1660,9 @@ class WorksRegistration {
 							}
 
 							/* Generate PWR records */
-							if($this->Shareholders[$ipi]['Controlled'] == 'Y' || ($this->CWR_Version > 2.1 && array_key_exists($shareholder['Link'], $original_publisher)))  // Only genereate PWR for controlled writers, or if CWR is version 2.2+
+							if($this->Shareholders[$ip_number]['Controlled'] == 'Y' || ($this->CWR_Version > 2.1 && array_key_exists($shareholder['Link'], $original_publisher)))  // Only genereate PWR for controlled writers, or if CWR is version 2.2+
 							{
-								foreach($original_publisher[$shareholder['Link']] as $pub_ipi)
+								foreach($original_publisher[$shareholder['Link']] as $pub_ip_number)
 								{
 									$sq++;
 									$rc++;
@@ -1857,13 +1671,13 @@ class WorksRegistration {
 
 									$rec = array(
 										'Record_Type'				=> 'PWR',
-										'Publisher_IP_Number'		=> $pub_ipi,
-										'Publisher_Name'			=> $this->Shareholders[$pub_ipi]['Name'],
-										'Writer_IP_Number'			=> $ipi
+										'Publisher_IP_Number'		=> $pub_ip_number,
+										'Publisher_Name'			=> $this->Shareholders[$pub_ip_number]['Name'],
+										'Writer_IP_Number'			=> $ip_number
 									);
 
 									/* include publisher sequence number if CWR version is 2.2+ */
-									if($this->CWR_Version > 2.1) $rec['Publisher_Sequence_Number'] = $pub_sequence[$pub_ipi];
+									if($this->CWR_Version > 2.1) $rec['Publisher_Sequence_Number'] = $pub_sequence[$pub_ip_number];
 
 									$cwr .= encode_cwr($this->Msgs, $rec, $group_tx, $sq);
 								}
@@ -1929,7 +1743,7 @@ class WorksRegistration {
 									'Record_Type'		=> 'PER',
 									'Performing_Artist_Last_Name' 			=> $this->Performers[$performer_id]['Last_Name'],
 									'Performing_Artist_First_Name' 			=> $this->Performers[$performer_id]['First_Name'],
-									'Performing_Artist_CAE_IPI_Name_Number' => $this->Performers[$performer_id]['IPI'],
+									'Performing_Artist_CAE_IPI_Name_Number' => $this->Performers[$performer_id]['IPI_Name_Number'],
 									'Performing_Artist_IPI_Base_Number' 	=> $this->Performers[$performer_id]['IPI_base']);
 
 								$cwr .= encode_cwr($this->Msgs, $rec, $group_tx, $sq);
@@ -2293,9 +2107,11 @@ class WorksRegistration {
 						else $record['Controlled'] = 'N';
 
 						$this->addShareholder(array(
-							'IPI'						=> $record['Interested_Party_Number'],
-							'Name'						=> $record['Publisher_Name'],
+							'IP_Number'					=> $record['Interested_Party_Number'],
+							'IPI_Name_Number'			=> $record['Publisher_CAE_IPI_Name_Number'],
+							'IPI_Base_Number'			=> $record['Publisher_IPI_Base_Number'],
 							'First_Name'				=> '', // First_Name is left blank for publishers
+							'Name'						=> $record['Publisher_Name'],
 							'PRO'						=> $record['PR_Society'],
 							'MRO'						=> $record['MR_Society'],
 							'SRO'						=> $record['SR_Society'],
@@ -2303,7 +2119,7 @@ class WorksRegistration {
 							'US_Rep'					=> $record['USA_License_Ind']));
 
 						$this->NewShare(array(
-							'IPI'						=> $record['Interested_Party_Number'],
+							'IP_Number'					=> $record['Interested_Party_Number'],
 							'Link'						=> intval($record['Publisher_Sequence_Number']),
 							'Role'						=> $record['Publisher_Type'],
 							'PR_Ownership_Share'		=> $record['PR_Ownership_Share'],
@@ -2336,11 +2152,13 @@ class WorksRegistration {
 						if($record['Record_Type'] == "SWR") $record['Controlled'] = 'Y';
 						else $record['Controlled'] = 'N';
 
-						$ipi = intval($record['Interested_Party_Number']);
-						if($ipi == 0) $ipi = $this->tempIPI($record['Writer_Last_Name'], $record['Writer_First_Name'], $record['PR_Society']); // Assign temp IPI in place of unknown IPI
+						$ip_number = intval($record['Interested_Party_Number']);
+						if($ip_number == 0) $ip_number = $this->tempIPnumber($record['Writer_Last_Name'], $record['Writer_First_Name'], $record['PR_Society']); // Assign temp IPI in place of unknown IPI
 
 						$this->addShareholder(array(
-							'IPI'						=> $ipi,
+							'IP_Number'					=> $ip_number,
+							'IPI_Name_Number'			=> $record['Writer_CAE_IPI_Name_Number'],
+							'IPI_Base_Number'			=> $record['Writer_IPI_Base_Number'],
 							'First_Name'				=> $record['Writer_First_Name'],
 							'Name'						=> $record['Writer_Last_Name'],
 							'PRO'						=> $record['PR_Society'],
@@ -2350,7 +2168,8 @@ class WorksRegistration {
 							'US_Rep'					=> $record['USA_License_Ind']));
 
 						$this->NewShare(array(
-							'IPI'						=> $ipi, // $record['Interested_Party_Number'],
+							'IP_Number'					=> $ip_number,
+
 							'Role'						=> $record['Writer_Designation_Code'],
 							'PR_Ownership_Share'		=> $record['PR_Ownership_Share'],
 							'MR_Ownership_Share'		=> $record['MR_Ownership_Share'],
@@ -2390,7 +2209,7 @@ class WorksRegistration {
 							while($this->NextShare())
 							{
 								$share = $this->getShareDetails();
-								if($share['IPI'] == $record['Publisher_IP_Number']) $link = intval($share['Link']);
+								if($share['IP_Number'] == $record['Publisher_IP_Number']) $link = intval($share['Link']);
 							}
 						}
 						else $link = intval($record['Publisher_Sequence_Number']); // CWR v2.2+ does not require a lookup
@@ -2400,7 +2219,7 @@ class WorksRegistration {
 						while($this->NextShare())
 						{
 							$share = $this->getShareDetails();
-							if($share['IPI'] == $record['Writer_IP_Number']) $this->setShareDetails(array('Link' => $link));
+							if($share['IP_Number'] == $record['Writer_IP_Number']) $this->setShareDetails(array('Link' => $link));
 						}
 						break;
 					}

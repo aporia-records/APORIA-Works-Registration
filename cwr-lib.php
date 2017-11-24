@@ -487,8 +487,9 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 	{
 		if(stristr($key, "IPI_Name")) // check IPI Name number values
 		{
-			$rec[$key] = sprintf("%011d", $rec[$key]); // Add leading zeros if missing
-			if(!is_valid_ipi_name($rec[$key])) $rec[$key] = ' '; // replace invalid/unkown IPI Name Numbers and/or temp IDs with spaces
+			$rec[$key] = sprintf("%011d", $rec[$key]); 				// Add leading zeros if missing
+			if(intval($rec[$key]) == 0) $rec[$key] = ' ';			// replace unknown IPI Name Numbers with spaces
+			if(!is_valid_ipi_name($rec[$key])) $rec[$key] = ' '; 	// replace invalid IPI Name Numbers with spaces
 		}
 
 		if(stristr($key, "IPI_Base")) // Check IPI Base Number values
