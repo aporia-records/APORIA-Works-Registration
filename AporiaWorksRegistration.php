@@ -30,7 +30,7 @@ class WorksRegistration {
 	const Name		= "APORIA Works Registration";
 
 	// Version/revision of this class
-	const Version	= 1.45;
+	const Version	= 1.46;
 
 	// bitmasks for registration groups/transaction types
 	const CWR_NWR	= 1;
@@ -76,13 +76,24 @@ class WorksRegistration {
 	public $Contact_ID = '';	// An identifier associated with the contact person at the organization that originated this transaction.
 	
 	public $CWR_Filename;
-	public $CMRRA_Filename;
-	public $EXCEL_Filename;
 
 	public	$character_set = '';
 	public	$transmission_date;
 	private $creation_date;
 	private $creation_time;
+
+	private $TIS_Numeric_Codes = array(
+		4, 8, 12, 20, 24, 28, 31, 32, 36, 40, 44, 48, 50, 51, 52, 56, 64, 68, 70, 72, 76, 84, 90, 96, 100, 104, 108, 112, 
+		116, 120, 124, 132, 140, 144, 148, 152, 156, 158, 170, 174, 178, 180, 188, 191, 192, 196, 200, 203, 204, 208, 212, 
+		214, 218, 222, 226, 230, 231, 232, 233, 242, 246, 250, 258, 262, 266, 268, 270, 276, 278, 280, 288, 296, 300, 308, 
+		320, 324, 328, 332, 336, 340, 344, 348, 352, 356, 360, 364, 368, 372, 376, 380, 384, 388, 392, 398, 400, 404, 408, 
+		410, 414, 417, 418, 422, 426, 428, 430, 434, 438, 440, 442, 446, 450, 454, 458, 462, 466, 470, 478, 480, 484, 492, 
+		496, 498, 499, 504, 508, 512, 516, 520, 524, 528, 540, 548, 554, 558, 562, 566, 578, 583, 584, 585, 586, 591, 598, 
+		600, 604, 608, 616, 620, 624, 626, 630, 634, 642, 643, 646, 659, 662, 670, 674, 678, 682, 686, 688, 690, 694, 702, 
+		703, 704, 705, 706, 710, 716, 720, 724, 728, 729, 732, 736, 740, 748, 752, 756, 760, 762, 764, 768, 776, 780, 784, 
+		788, 792, 795, 798, 800, 804, 807, 810, 818, 826, 834, 840, 854, 858, 860, 862, 882, 886, 887, 890, 891, 894, 2100, 
+		2101, 2102, 2103, 2104, 2105, 2106, 2107, 2108, 2109, 2110, 2111, 2112, 2113, 2114, 2115, 2116, 2117, 2118, 2119, 
+		2120, 2121, 2122, 2123, 2124, 2125, 2126, 2127, 2128, 2129, 2130, 2131, 2132, 2133, 2134, 2136);
 
 	private $TISdata = array();
 	public	$TIS_mem = 0; 		// TIS_mem will contain the amount of memory allocated to store TISdata.
@@ -99,6 +110,8 @@ class WorksRegistration {
 /* Callback functions */
 	public $callback_find_unknown_writer = null; // should return an ID if the unknown writer is already in the database
 	public $callback_lookup_ipi = null; // check if the IPI is valid/exists in the IPI database
+
+	public $Transliterate = false;	// If true, characters will be transliterated to their valid CIS Character Set equivalents
 
 /**
  TIS Rewrite Rules:
@@ -143,6 +156,8 @@ class WorksRegistration {
 	function LastMsg() // return the contents of the last message
 	{
 		$last = count($this->Msgs) -1;
+		if($last<0) return(false);
+
 		return($this->Msgs[$last]);
 	}
 	
@@ -153,6 +168,12 @@ class WorksRegistration {
 		else $this->CurrentWork = count($this->Works);
 
 		if(empty($data['ISWC'])) $data['ISWC'] = ''; // initialize an empty ISWC field, so it will always exist
+
+		if(!empty($data['ISWC']) && !is_valid_iswc($data['ISWC']))
+		{
+			$this->Msgs[] = sprintf("NewWork(): Invalid ISWC %s - replaced with spaces. (%d)", $data['ISWC'], is_valid_iswc($data['ISWC']));
+			$data['ISWC'] = '';
+		}
 
 		$this->CurrentWork++;
 		$this->setWorkDetails($data);
@@ -212,13 +233,22 @@ class WorksRegistration {
 				unset($data['ISRC']);
 			}
 
+			if(isset($data['Title'])) 
+			{
+				$data['Title'] = strtoupper(filterchars($data['Title']));
+				if($this->Transliterate) $data['Title'] = transliterate($data['Title']);
+			}
+
 			foreach($data as $key => $value) {
 				if(!is_array($value)) $this->Works[$this->CurrentWork][$key] = trim($value);
 			}
 			if(!array_key_exists('Duration', $this->Works[$this->CurrentWork])) $this->Works[$this->CurrentWork]['Duration'] = '';
-			if(!array_key_exists('PR_Ownership_Share', $this->Works[$this->CurrentWork])) $this->Works[$this->CurrentWork]['PR_Ownership_Share'] = 0;
-			if(!array_key_exists('MR_Ownership_Share', $this->Works[$this->CurrentWork])) $this->Works[$this->CurrentWork]['MR_Ownership_Share'] = 0;
-			if(!array_key_exists('SR_Ownership_Share', $this->Works[$this->CurrentWork])) $this->Works[$this->CurrentWork]['SR_Ownership_Share'] = 0;
+			if(!array_key_exists('Priority_Flag', $this->Works[$this->CurrentWork])) $this->Works[$this->CurrentWork]['Priority_Flag'] = '';
+
+			if(!array_key_exists('Contact_Name', $this->Works[$this->CurrentWork]))	$this->Works[$this->CurrentWork]['Contact_Name'] =& $this->Contact_Name;
+			if(!array_key_exists('Contact_ID', $this->Works[$this->CurrentWork]))	$this->Works[$this->CurrentWork]['Contact_ID'] =& $this->Contact_ID;
+
+			if(!array_key_exists('ISRC', $this->Works[$this->CurrentWork]))	$this->Works[$this->CurrentWork]['ISRC'] = array();
 
 			return(true);
 		}
@@ -234,6 +264,13 @@ class WorksRegistration {
 			return(true);
 		}
 		return(false);
+	}
+
+	function getISRCs()
+	{
+		if($this->CurrentWork > 0 && isset($this->Works[$this->CurrentWork]['ISRC']))
+			return($this->Works[$this->CurrentWork]['ISRC']);
+		else return(array());
 	}
 
 	function setAttributes($data) // Used to add COM, EWT and VER record attributes to a Work
@@ -268,6 +305,16 @@ class WorksRegistration {
 	{
 		$list = $data['Record_Type'];
 		unset($data['Record_Type']);
+
+		if($list = 'ALT')
+		{
+			$National_Title = false;
+
+			// Strip invalid characters Alternative Title field
+			if($data['Title_Type'] == 'OL' || $data['Title_type'] == 'AL') $National_Title = true;
+			$data['Alternate_Title'] = strtoupper(filterchars($value), $National_Title);
+			if($this->Transliterate) $data['Alternate_Title'] = transliterate($data['Alternate_Title']);
+		}
 
 		$this->Works[$this->CurrentWork][$list][] = $data;
 	}
@@ -335,6 +382,14 @@ class WorksRegistration {
 			if(empty($this->Works[$this->CurrentWork]['Share'][$shareKey]['PR_Ownership_Share'])) $this->Works[$this->CurrentWork]['Share'][$shareKey]['PR_Ownership_Share'] = 0;
 			if(empty($this->Works[$this->CurrentWork]['Share'][$shareKey]['MR_Ownership_Share'])) $this->Works[$this->CurrentWork]['Share'][$shareKey]['MR_Ownership_Share'] = 0;
 			if(empty($this->Works[$this->CurrentWork]['Share'][$shareKey]['SR_Ownership_Share'])) $this->Works[$this->CurrentWork]['Share'][$shareKey]['SR_Ownership_Share'] = 0;
+
+			if(empty($this->Works[$this->CurrentWork]['Share'][$shareKey]['Special_Agreements_Indicator'])) $this->Works[$this->CurrentWork]['Share'][$shareKey]['Special_Agreements_Indicator'] = '';
+			if(empty($this->Works[$this->CurrentWork]['Share'][$shareKey]['Reversionary_Indicator'])) $this->Works[$this->CurrentWork]['Share'][$shareKey]['Reversionary_Indicator'] = '';
+
+			if(empty($this->Works[$this->CurrentWork]['Share'][$shareKey]['First_Recording_Refusal_Ind'])) $this->Works[$this->CurrentWork]['Share'][$shareKey]['First_Recording_Refusal_Ind'] = 'N';
+			if(empty($this->Works[$this->CurrentWork]['Share'][$shareKey]['Work_For_Hire_Indicator'])) $this->Works[$this->CurrentWork]['Share'][$shareKey]['Work_For_Hire_Indicator'] = 'N';
+
+			if(!isset($this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'])) $this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'] = array();
 
 			return(true);
 		}
@@ -431,6 +486,12 @@ class WorksRegistration {
 			if($firstKey == 0) $shareKey--;			
 		}
 
+		if(!in_array($TIS, $this->TIS_Numeric_Codes))
+		{
+			$this->Msgs[] = "TIS Numeric Code was not found in the TIS database.";
+			return(false);
+		}
+
 		if(is_array($data))
 		{
 			// Collection values should be zero if this territory is being excluded - added in v1.44
@@ -455,7 +516,7 @@ class WorksRegistration {
 				$this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['SR_Collection_Share'] = 0;
 
 			if(!array_key_exists('Shares_Change', $this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]))
-				$this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['Shares_Change'] = '';
+				$this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['Shares_Change'] = 'N';
 
 			if($this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['Indicator'] == 'I' &&
 				($this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['PR_Collection_Share']
@@ -508,20 +569,36 @@ class WorksRegistration {
 	{
 		$work =& $this->Works[$this->CurrentWork];  // set up $work is a reference to the current work
 
-		if(empty($work['Recorded_Flag'])) $work['Recorded_Flag'] = 'U';
-		if(empty($work['ISRC'])) unset($work['ISRC']); // Strip empty ISRC values
+		// Check 'Grand Rights' indicator - default to 'N' if not specified.
+		if(empty($work['Grand_Rights_Ind'])) $work['Grand_Rights_Ind'] = 'N';
+		if($work['Grand_Rights_Ind'] != 'Y') $work['Grand_Rights_Ind'] = 'N';
 
-		if(empty($work['Version_Type'])) $work['Version_Type'] = 'ORI'; // Default to type 'Original Work'
-		if(empty($work['Musical_Work_Distribution_Category'])) $work['Musical_Work_Distribution_Category'] = 'POP'; // Default to distribution category 'Popular'
+		// Check Recorded Indicator - default to Unknown
+		if(empty($work['Recorded_Indicator'])) $work['Recorded_Indicator'] = 'U';
+
+		// Strip empty ISRC values
+		if(empty($work['ISRC'])) unset($work['ISRC']);
+
+		// Check work version type - default to type 'Original Work'
+		if(empty($work['Version_Type'])) $work['Version_Type'] = 'ORI';
+
+		// Check distribution category - default to 'Popular'
+		if(empty($work['Musical_Work_Distribution_Category'])) $work['Musical_Work_Distribution_Category'] = 'POP';
 
 		if(!empty($work['PER'])) $work['PER'] = array_unique($work['PER']);
 
 		if(!empty($work['ALT']))
 		{
-			if(!in_array($work['ALT']['Title_Type'], array('AT', 'TE', 'FT', 'IT', 'OT', 'TT', 'PT', 'RT', 'ET', 'OL', 'AL')))
+			foreach($work['ALT'] as $altTitle)
 			{
-				$this->Msgs[] = "ALT: A language Code Must be entered if the Title Type is equal to 'OL' or 'AL'.";
-				return(false);
+				if(!in_array($altTitle['Title_Type'], array('AT', 'TE', 'FT', 'IT', 'OT', 'TT', 'PT', 'RT', 'ET', 'OL', 'AL')))
+				{
+					if(empty($altTitle['Language_Code']) && ($altTtiel['Title_Type'] == 'OL' || $altTtiel['Title_Type'] == 'AL'))
+					{
+						$this->Msgs[] = "ALT: A language Code Must be entered if the Title Type is equal to 'OL' or 'AL'.";
+						return(false);
+					}
+				}
 			}
 		}
 
@@ -636,31 +713,16 @@ class WorksRegistration {
 		$writers = 0;
 		$controlled_writers = 0;
 		$arrangers = 0;
+		$controlled_swt_records = 0;
 
 		$this->CurrentShare = 0;
 
-		while($this->NextShare()) 
+		while($this->NextShare())
 		{
 			$shareholder = $this->getShareDetails();
 
 			$ip_number = intval($shareholder['IP_Number']);
-
 			$ipi_name_number = $this->Shareholders[$ip_number]['IPI_Name_Number'];
-			
-		    if(!is_valid_ipi_name(sprintf("%011d", $ipi_name_number)) && $this->Shareholders[$ip_number]['Controlled']=='Y')
-			{
-				printf("%d\n", calculateModulo101CheckSum(sprintf("%011d", $ipi_name_number)));
-				$this->Msgs[] = sprintf("Validation failed: invalid IPI number for controlled writer %s (%011d).", $this->Shareholders[$ip_number]['Name']." ".$this->Shareholders[$ip_number]['First_Name'], $ipi_name_number);
-				return(false);
-			}
-			else if(is_callable($this->callback_lookup_ipi))
-			{
-				if(! $this->callback_lookup_ipi($ipi_name_number))
-				{
-					$this->Msgs[] = sprintf("Validation failed: IPI number for controlled writer %s (%09d) not found in database.", $this->Shareholders[$ip_number]['Name']." ".$this->Shareholders[$ip_number]['First_Name'], $ipi_name_number);
-					return(false);
-				}
-			}
 
 			// Sum ownership share values
 			$PR_Ownership_Share += $shareholder['PR_Ownership_Share'];
@@ -668,7 +730,7 @@ class WorksRegistration {
 			$SR_Ownership_Share += $shareholder['SR_Ownership_Share'];
 
 			// Sum collection share values with the totals for each territory:
-			$selection = $this->getCollectionValues(); // get collection values for each applicable territory	
+			$selection = $this->getCollectionValues(); // get collection values for each applicable territory
 			if(!empty($selection)) 
 			{
 				foreach($selection as $ter => $territory)
@@ -706,7 +768,8 @@ class WorksRegistration {
 				case 'E':  //	publishers
 				case 'SE': // 	Sub-publishers
 				{
-					foreach($this->Works[$this->CurrentWork]['Share'][$this->CurrentShare]['TIS'] as $ter => $territory)
+					if(!empty($this->Works[$this->CurrentWork]['Share'][$this->CurrentShare]['TIS']))
+						foreach($this->Works[$this->CurrentWork]['Share'][$this->CurrentShare]['TIS'] as $ter => $territory)
 					{
 						if($territory['Indicator'] == 'I' && $territory['PR_Collection_Share'] + $territory['MR_Collection_Share'] + $territory['SR_Collection_Share'] == 0)
 						{
@@ -728,6 +791,11 @@ class WorksRegistration {
 						{
 							$this->Msgs[] = sprintf("SPT008: SR Collection Share was not in the range 0-100%% (TIS %03d)", $ter);
 							return(false);
+						}
+						if($territory['Shares_Change'] != 'Y' && $territory['Shares_Change'] != 'N')
+						{
+							$this->Works[$this->CurrentWork]['Share'][$this->CurrentShare]['TIS'][$ter]['Shares_Change'] = 'N';
+							$this->Msgs[] = "Shares change when Subpublished entered was not one of 'N' or 'Y' - replaced with 'N'.";
 						}
 					}
 					break;
@@ -759,7 +827,12 @@ class WorksRegistration {
 				case 'CA': // Composer/Author	The creator or one of the creators of text and musical elements within a musical work.
 				{
 					$writers++;
-					if($this->Shareholders[$ip_number]['Controlled']=='Y') $controlled_writers++;
+					if($this->Shareholders[$ip_number]['Controlled']=='Y')
+					{
+						$controlled_writers++;
+						if(count($this->Works[$this->CurrentWork]['Share'][$this->CurrentShare]['TIS']) > 0) $controlled_swt_records++;
+					}
+
 					break;
 				}
 
@@ -780,11 +853,50 @@ class WorksRegistration {
 					return(false);
 				}
 			}
+
+			// Check Special Agreements Indicator:
+			switch($shareholder['Role'])
+			{
+				/* Publishers: */
+				case 'AQ': //	Acquirer	A publisher that acquires some or all of the ownership from an Original Publisher, but yet the Original Publisher still controls the work.
+				case 'AM': //	Administrator	An interested party that collects royalty payments on behalf of a publisher that it represents.
+				case 'ES': //	Substituted Publisher	A publisher acting on behalf of publisher or sub-publisher.
+				case 'E': //publishers
+				case 'SE': // Sub-publishers
+				{
+					if(!empty($shareholder['Special_Agreements_Indicator']))
+					{
+						if(in_array($shareholder['Special_Agreements_Indicator'], array('R', 'L', 'B', 'Y', 'N', 'U')))
+						{
+							// If Record Type is “OPU”, Special Agreements Indicator can only be “L” or blank. (FR - default to space)
+							if($this->Shareholder[$ip_number]['Controlled'] == 'N' && $shareholder['Special_Agreements_Indicator'] != 'L')
+							{
+								$this->Msgs = sprintf("Warning: Non-controlled shareholder %d - Special Agreements Indicator can only be “L” or blank. (FR - default to space) ", $ip_number);
+								$this->setShareDetails(array('Special_Agreements_Indicator' => ''));
+							}
+						}
+						else
+						{
+							// If entered, Special Agreement Indicator must match an entry in the Special Agreement Indicator table. (FR - default to spaces)
+							$this->Msgs = sprintf("Warning: Shareholder %d - Special Agreements Indicator must match an entry in the Special Agreement Indicator table. (FR - default to spaces)", $ip_number);
+							$this->setShareDetails(array('Special_Agreements_Indicator' => ''));
+						}
+					}
+					break;
+				}
+			}
+
 		}
 
 		if($writers < 1)
 		{
 			$this->Msgs[] = "There must be at least one writer (Writer Designation Code = 'CA', 'A', 'C') in a work.";
+			return(false);
+		}
+
+		if($controlled_swt_records < 1)
+		{
+			$this->Msgs[] = "At least one writer controlled by collecting submitter was missing a collection territory (SWT).";
 			return(false);
 		}
 
@@ -941,37 +1053,125 @@ class WorksRegistration {
 			$this->Msgs[] = "addShareholder() - requires data in array form.  IPI is mandatory.";
 			return(false);
 		}
+
 		$ip_number = intval($data['IP_Number']);
+		$performer_number = 0;
 
 		if(!array_key_exists ($ip_number, $this->Shareholders)) // Skip this entry if it already exists
 		{
 			if((count($data) > 5))
 			{
-//				if($ip_number < 100000000) $this->Msgs[] = sprintf("Warning: unidentified party %s (Temp IPI '%d' will be replaced with spaces)", $data['Name']." ".$data['First_Name'], $ipi);
+				$invalid_chars = array(chr(34), '*', ',', ':', ';', '<', '=', '>', '[', chr(92), ']', '^', '_', '{', '}', '~', '£', '€');
+				
+				// Strip invalid characters from Name fields
+				$this->Shareholders[$ip_number]['Name'] 		= str_replace($invalid_chars, "", filterchars(strtoupper($data['Name'])));
+				$this->Shareholders[$ip_number]['First_Name']	= str_replace($invalid_chars, "", filterchars(strtoupper($data['First_Name'])));
 
-				$this->Shareholders[$ip_number]['Name'] 		= $data['Name'];
-				$this->Shareholders[$ip_number]['First_Name']	= $data['First_Name'];
 				$this->Shareholders[$ip_number]['Controlled'] 	= $data['Controlled'];
 				$this->Shareholders[$ip_number]['US_Rep'] 		= $data['US_Rep'];
 
-				if(!empty($data['IPI_Name_Number'])) $this->Shareholders[$ip_number]['IPI_Name_Number'] = $data['IPI_Name_Number'];
+				if(!empty($data['IPI_Name_Number']))
+				{
+					$ipi_name_number = $data['IPI_Name_Number'];
+					
+					$performer_number = $this->findPerformerByIPIName($ipi_name_number);
+
+					$this->Shareholders[$ip_number]['IPI_Name_Number'] = $ipi_name_number;
+				    if(!is_valid_ipi_name($ipi_name_number) && $this->Shareholders[$ip_number]['Controlled']=='Y')
+					{
+						$this->Msgs[] = sprintf("Validation failed: invalid IPI number for controlled writer %s (%011d).", $this->Shareholders[$ip_number]['Name']." ".$this->Shareholders[$ip_number]['First_Name'], $ipi_name_number);
+						$this->Shareholders[$ip_number]['IPI_Name_Number_Valid'] = 'N';
+					}
+					else if(is_callable($this->callback_lookup_ipi))
+					{
+						if(! $this->callback_lookup_ipi($ipi_name_number))
+						{
+							$this->Msgs[] = sprintf("Validation failed: IPI number for controlled writer %s (%09d) not found in database.", $this->Shareholders[$ip_number]['Name']." ".$this->Shareholders[$ip_number]['First_Name'], $ipi_name_number);
+							$this->Shareholders[$ip_number]['IPI_Name_Number_Valid'] = 'N';
+						}
+					}
+				}
 				else $this->Shareholders[$ip_number]['IPI_Name_Number'] = ''; // No IPI Name Number - default to spaces
 
+				if(!empty($data['IPI_Base_Number']) && is_valid_ipi_base($data['IPI_Base_Number'])) $this->Shareholders[$ip_number]['IPI_Base_Number'] = $data['IPI_Base_Number'];
+				else $this->Shareholders[$ip_number]['IPI_Base_Number'] = ''; // No IPI Base Number - default to spaces
+
+				if($performer_number > 0) $this->Performers[$performer_number]['IPI_Base_Number'] = $this->Shareholders[$ip_number]['IPI_Base_Number'];
+
 				if(!empty($data['PRO'])) $this->Shareholders[$ip_number]['PRO'] = $data['PRO'];
-				else $this->Shareholders[$ip_number]['PRO'] = 99; // Defaul to No Society if none is declared
+				else $this->Shareholders[$ip_number]['PRO'] = 99; // Default to No Society if none is declared
 
 				if(!empty($data['MRO'])) $this->Shareholders[$ip_number]['MRO'] = $data['MRO'];
-				else $this->Shareholders[$ip_number]['MRO'] = 99; // Defaul to No Society if none is declared
-				
-				if(!empty($data['SRO'])) $this->Shareholders[$ip_number]['SRO'] = $data['SRO'];
-				else $this->Shareholders[$ip_number]['SRO'] = 99; // Defaul to No Society if none is declared
+				else $this->Shareholders[$ip_number]['MRO'] = 99; // Default to No Society if none is declared
 
-				return(true);
+				if(!empty($data['SRO'])) $this->Shareholders[$ip_number]['SRO'] = $data['SRO'];
+				else $this->Shareholders[$ip_number]['SRO'] = 99; // Default to No Society if none is declared
+
+				if(!empty($data['Personal_Number'])) $this->Shareholders[$ip_number]['Personal_Number'] = $data['Personal_Number'];
+				else $this->Shareholders[$ip_number]['Personal_Number'] = ''; // Initialize Personal Number if none specified
+
+				if(!empty($data['Unknown_Indicator'])) $this->Shareholders[$ip_number]['Unknown_Indicator'] = $data['Unknown_Indicator'];
+				else $this->Shareholders[$ip_number]['Unknown_Indicator'] = ''; // Initialize Unknown Indictor if none specified
+
+				// Non-controlled shareholder checks:
+				if($this->Shareholders[$ip_number]['Controlled'] == 'N')
+				{
+					if(empty($this->Shareholders[$ip_number]['Name']))
+					{
+						$this->Shareholders[$ip_number]['Unknown_Indicator'] = 'Y';
+						$this->Msgs[] = sprintf("Warning: Shareholder %d - Last Name empty; Unknown Indicator set to 'Y'.", $ip_number);
+					} 
+
+					if($this->Shareholders[$ip_number]['Unknown_Indicator'] == 'Y')
+					{
+							if(!empty($this->Shareholders[$ip_number]['Name']))
+							{
+								$this->Shareholders[$ip_number]['Name'] = '';
+								$this->Msgs[] = sprintf("Warning: Shareholder %d - Unknown Indicator set to 'Y' -- Last Name set to spaces.", $ip_number);
+							}
+					} else { 
+						// If Record Type is equal to OWR, and Writer Unknown Indicator is entered, it must be equal to Y or N (FR - default to N) 
+						$this->Shareholders[$ip_number]['Unknown_Indicator'] = 'N';
+					}
+				} 
+
+				// Controlled shareholder checks:
+				if($this->Shareholders[$ip_number]['Controlled'] == 'Y') 
+				{ 
+					if(empty($this->Shareholders[$ip_number]['Name']))
+					{
+						$this->Msgs[] = sprintf("Shareholder %d - Cannot add a Controlled Shareholder without a Last Name.", $ip_number);
+						return(false);
+					}
+					if(empty($this->Shareholders[$ip_number]['Unknown_Indicator']))
+					{
+						$this->Shareholders[$ip_number]['Unknown_Indicator'] = '';
+//						$this->Msgs[] = sprintf("Warning: Controlled Shareholder %d - Unknown Indicator not set.", $ip_number);
+					}
+				}
 			}
 			else $this->Msgs[] = sprintf("Insufficient data in shareholders table! (Interested Party number: %d)", $ip_number);
 			return(false);	
 		}
 		else return(true);
+	}
+
+	function findPerformerByIPIName($ipi_name_number)
+	{
+		if(empty($ipi_name_number)) return(false);
+
+		foreach($this->Performers as $performer_number => $performer)
+			if($performer['IPI_Name_Number'] == $ipi_name_number) return($performer_number);
+
+		return(false);
+	}
+
+	function findShareholderByIPIName($ipi_name_number)
+	{
+		foreach($this->Shareholders as $ip_number => $shareholder)
+			if($shareholder['IPI_Name_Number'] == $ipi_name_number) return($ip_number);
+
+		return(false);
 	}
 
 	function tempIPnumber($lastname, $firstname, $pro)
@@ -996,10 +1196,11 @@ class WorksRegistration {
 	function addPerformer($lastname, $firstname = '', $ipi_name_number = 0, $ipi_base_number = '')
 	{
 		$found = false;
-		$i = 0;
+		$i = 1;
 
 		while($i < count($this->Performers) && !$found)
 		{
+			if(!isset($this->Performers[$i])) break;
 			$performer =& $this->Performers[$i];
 			if($ipi_name_number > 0 && $performer['IPI_Name_Number'] == $ipi_name_number) $found = $i;
 			else if($performer['Last_Name'].$performer['First_Name'] == $lastname.$firstname) $found = $i;
@@ -1008,20 +1209,24 @@ class WorksRegistration {
 
 		if(!is_valid_ipi_base($ipi_base_number)) $ipi_base_number = ''; // Replace invalid IPI Base Numbers with blanks
 
+		$ip_number = $this->findShareholderByIPIName($ipi_name_number);
+		if($ip_number) $ipi_base_number = $this->Shareholders[$ip_number]['IPI_Base_Number'];
+
 		if($found == false)
 		{
-			$this->Performers[] = array(
+			$this->Performers[$i] = array(
 				'Last_Name'			=> $lastname,
 				'First_Name'		=> $firstname,
 				'IPI_Name_Number'	=> $ipi_name_number,
-				'IPI_base'			=> $ipi_base_number);
+				'IPI_Base_Number'	=> $ipi_base_number);
 
-			end($this->Performers);
-			$found = key($this->Performers);
+			$found = $i;
+
+//			end($this->Performers);
+//			$found = key($this->Performers);
 		}
 
 		$this->Works[$this->CurrentWork]['PER'][] = $found;
-
 		return($found);
 	}
 
@@ -1098,10 +1303,17 @@ class WorksRegistration {
 			return(false);
 		}
 
+		if(!isset($data['ISWC'])) $data['ISWC'] = '';
+
+		if(!empty($data['ISWC']) && !is_valid_iswc($data['ISWC']))
+		{
+			$this->Msgs[] = sprintf("addTrack(): Invalid ISWC %s - replaced with spaces.", $data['ISWC']);
+			$data['ISWC'] = '';
+		}
+
 		if(empty($data['UPC']) && isset($data['EAN'])) $data['UPC'] =& $data['EAN'];
 
 		$isrc = str_replace(array('ISRC', ' ', '-'), '', $data['ISRC']);
-
 
 		if(!empty($data['id']))
 		{
@@ -1117,12 +1329,46 @@ class WorksRegistration {
 			unset($data['UPC']);
 
 			$this->track[$isrc]['Releases'][]['UPC'] = $upc;
-			$this->release[$upc]['Tracks'][] = array('Track_ID' => $this->track[$isrc]['Track_ID'], 'ISRC' => $this->track[$isrc]['ISRC'], 'Work_ID' => $this->track[$isrc]['Work_ID'], 'ISWC' => $this->track[$isrc]['ISWC']);
+
+			$tmp = array();
+
+			if(!empty($this->track[$isrc]['Track_ID']))	$tmp['Track_ID']	= $this->track[$isrc]['Track_ID'];
+			else if(!empty($data['Track_ID'])) 			$tmp['Track_ID']	= $data['Track_ID'];
+
+			if(!empty($this->track[$isrc]['ISRC']))		$tmp['ISRC']		= $this->track[$isrc]['ISRC'];
+			else if(!empty($data['ISRC']))				$tmp['ISRC']		= $data['ISRC'];
+
+			if(!empty($this->track[$isrc]['Work_ID']))	$tmp['Work_ID']		= $this->track[$isrc]['Work_ID'];
+			else if(!empty($data['Work_ID']))			$tmp['Work_ID']		= $data['Work_ID'];
+
+			if(!empty($this->track[$isrc]['ISWC']))		$tmp['ISWC']		= $this->track[$isrc]['ISWC'];
+			else if(!empty($data['ISWC']))				$tmp['ISWC']		= $data['ISWC'];
+
+			if(count($tmp) > 0) $this->release[$upc]['Tracks'][] = $tmp;
+			unset($tmp);
+
+//			$this->release[$upc]['Tracks'][] = array('Track_ID' => $this->track[$isrc]['Track_ID'], 'ISRC' => $this->track[$isrc]['ISRC'], 'Work_ID' => $this->track[$isrc]['Work_ID'], 'ISWC' => $this->track[$isrc]['ISWC']);
 		}
 
 		foreach($data as $key => $value)
 			if(!is_array($value)) $this->track[$isrc][$key] = strtoupper(trim($value));
 
+		// ISRC validity check
+		if(is_valid_isrc($this->track[$isrc]['ISRC'])) $this->track[$isrc]['ISRC_Validity'] = 'Y';
+		else $this->track[$isrc]['ISRC_Validity'] = 'N';
+
+		// ISRC-ISWC link check: invalid if there is no corresponding ISWC
+		if(empty($this->track[$isrc]['ISWC'])) $this->track[$isrc]['ISRC_Validity'] = 'U';
+
+		// Recording format defaults to Audio
+		if(empty($this->track[$isrc]['Recording_Format'])) $this->track[$isrc]['Recording_Format'] = 'A';
+		if($this->track[$isrc]['Recording_Format'] != 'V') $this->track[$isrc]['Recording_Format'] = 'A';
+
+		// Recording technique - defaults to Unknown
+		if(empty($this->track[$isrc]['Recording_Technique'])) $this->track[$isrc]['Recording_Technique'] = 'U';
+		if($this->track[$isrc]['Recording_Technique'] != 'A' && $this->track[$isrc]['Recording_Technique'] != 'D') $this->track[$isrc]['Recording_Technique'] = 'U';
+
+		// Initialize the releases list if it does not already exist
 		if(empty($this->track[$isrc]['Releases'])) $this->track[$isrc]['Releases'] = array();
 
 		return(true);
@@ -1201,7 +1447,6 @@ class WorksRegistration {
 	}
 
 /* End of Recordings functions */
-
 
 /******************************************************
 /* Generic Works Registration Formats
@@ -1347,7 +1592,7 @@ class WorksRegistration {
 			$this->CurrentWork = 0; // Set to 0 so that the first call to NextWork() will advance to position 1.
 			while($this->NextWork())
 			{
-				$work = $this->getWorkDetails();
+				$work = array_filter($this->getWorkDetails(), 'is_not_array');		// Get the first-level values of the current Work array [is_not_array() defined in cwr-lib.php]
 
 				/* Create a CWR entry only if this work passes validation */
 				if($this->validateWork() && $this->validateShares())
@@ -1390,31 +1635,13 @@ class WorksRegistration {
 						$group_rc++;
 
 						$this->CWR_Work_IDs[] = $work['Work_ID']; // add this work to the list of works included in the CWR - i.e. the ones that pass the above validation
-
-						/* Generate NWR Record (Transaction Header) */
-						$rec = array(
-							'Record_Type'							=> $transaction_type,
-							'Work_Title'							=> $work['Title'],
-							'Language_Code'							=> $work['Lang'],
-							'Submitter_Work_ID'						=> $work['Work_ID'],
-							'ISWC'									=> $work['ISWC'],
-							'Copyright_Date'						=> $work['Copyright_Date'],
-							'Copyright_Number'						=> $work['Copyright_Number'],
-							'Musical_Work_Distribution_Category'	=> $work['Musical_Work_Distribution_Category'],
-							'Duration'								=> $work['Duration'],
-							'Recorded_Indicator'					=> $work['Recorded_Flag'],
-							'Text_Music_Relationship'				=> $work['Text_Music_Relationship'],
-							'Composite_Type'						=> $work['Composite_Type'],
-							'Version_Type'							=> $work['Version_Type'],
-							'Music_Arrangement'						=> $work['Music_Arrangement'],
-							'Lyric_Adaptation'						=> $work['Lyric_Adaptation'],
-							'Contact_Name'							=> $this->Contact_Name,
-							'Contact_ID'							=> $this->Contact_ID,
-							'CWR_Work_Type'							=> $work['CWR_Work_Type'],
-							'Grand_Rights_Ind'						=> $work['Grand_Rights_Ind'],
-							'Composite_Component_Count'				=> $work['Composite_Component_Count'],
-							'Priority_Flag'							=> ''
-						);
+						/**
+							Generate NWR Record (Transaction Header)
+						**/
+						$rec = $work;
+						$rec['Work_Title'] =& $rec['Title'];			// Remap 'Title' to 'Work_Title'
+						$rec['Submitter_Work_ID'] =& $rec['Work_ID'];	// Remap 'Work_ID' to 'Submitter_Work_ID'
+						$rec['Record_Type'] = $transaction_type;		// Set the transaction type
 						$cwr .= encode_cwr($this->Msgs, $rec, $group_tx, $sq);
 
 						/* Build Share detail records here */
@@ -1484,7 +1711,7 @@ class WorksRegistration {
 										$publisher[] = $this->getShareDetails();
 									else 
 									{
-										$this->Msgs[] = sprintf("NOTICE: Sub-Publisher '%s' has no collection rights in the relevant territorie(s) - removed from CWR.\n", $this->Shareholders[$shareholder['IPI_Name_Number']]['Name']);
+										$this->Msgs[] = sprintf("NOTICE: Sub-Publisher '%s' has no collection rights in the relevant territorie(s) - removed from CWR.", $this->Shareholders[$shareholder['IPI_Name_Number']]['Name']);
 									}
 									break;
 								}
@@ -1522,38 +1749,45 @@ class WorksRegistration {
 							$sh++;
 							$ip_number = $shareholder['IP_Number'];
 
-//							$ipi = $shareholder['IPI_Name_Number'];
-
-							if(empty($shareholder['Link'])) $this->Msgs("No chain of title declared! (work: %s)\n", $work['Title']);
+							if(empty($shareholder['Link'])) $this->Msgs("No chain of title declared! (work: %s)", $work['Title']);
 							$chain = intval($shareholder['Link']);
 
 							if($shareholder['Role'] == 'E')
 							{
-//								$original_publisher[$chain] = $ipi;					
 								$original_publisher[$chain][0] = $ip_number;
 								$pub_sequence[$ip_number] = $chain;
 							}
 
 							if(array_key_exists('coPublisher', $shareholder))
 								$original_publisher[$shareholder['coPublisher']][] = $ip_number;
-//								$original_publisher[$shareholder['coPublisher']][] = $ipi;
 
 							$rec = array(
 								'Publisher_Sequence_Number'		=> $chain,
 								'Interested_Party_Number'		=> $ip_number,
 								'Publisher_Name'				=> $this->Shareholders[$ip_number]['Name'],
+								'Publisher_Unknown_Indicator'	=> $this->Shareholders[$ip_number]['Unknown_Indicator'],
 								'Publisher_CAE_IPI_Name_Number'	=> $this->Shareholders[$ip_number]['IPI_Name_Number'],
+								'Publisher_IPI_Base_Number'		=> $this->Shareholders[$ip_number]['IPI_Base_Number'],
 								'Publisher_Type'				=> $shareholder['Role'],
-//								'Submitter_Agreement_Number'	=> $shareholder['Agreement_Number'],
+
 								'PR_Society'					=> $this->Shareholders[$ip_number]['PRO'],
 								'PR_Ownership_Share'			=> $shareholder['PR_Ownership_Share'],
 								'MR_Society'					=> $this->Shareholders[$ip_number]['MRO'],
 								'MR_Ownership_Share'			=> $shareholder['MR_Ownership_Share'],
 								'SR_Society'					=> $this->Shareholders[$ip_number]['SRO'],
 								'SR_Ownership_Share'			=> $shareholder['SR_Ownership_Share'],
+
+								'Special_Agreements_Indicator'	=> $shareholder['Special_Agreements_Indicator'],
+								'First_Recording_Refusal_Ind'	=> $shareholder['First_Recording_Refusal_Ind'],
+
+//								'Submitter_Agreement_Number'	=> $shareholder['Agreement_Number'],
+//								'International_Standard_Agreement_Code' 
+//								'Society-assigned_Agreement_Number'
+//								'Agreement_Type'									
+
 								'USA_License_Ind'				=> substr($this->Shareholders[$ip_number]['US_Rep'], 0, 1)
 							);
-
+							
 							if($this->Shareholders[$ip_number]['Controlled'] == 'Y')
 									$rec['Record_Type'] = 'SPU';
 							else 	$rec['Record_Type'] = 'OPU';
@@ -1600,34 +1834,37 @@ class WorksRegistration {
 							$rc++;
 							$group_rc++;
 							$sh++;
-//							$ipi = intval($shareholder['IPI_Name_Number']);
 							$ip_number = $shareholder['IP_Number'];
-//							$chain = $shareholder['Link'];
 
 							$rec = array(
 								'Interested_Party_Number'		=> $ip_number,
 								'Writer_Last_Name'				=> $this->Shareholders[$ip_number]['Name'],
 								'Writer_First_Name'				=> $this->Shareholders[$ip_number]['First_Name'],
+								'Writer_Unknown_Indicator'		=> $this->Shareholders[$ip_number]['Unknown_Indicator'],
 								'Writer_Designation_Code'		=> $shareholder['Role'],
+
 								'Writer_CAE_IPI_Name_Number'	=> $this->Shareholders[$ip_number]['IPI_Name_Number'],
+								'Writer_IPI_Base_Number'		=> $this->Shareholders[$ip_number]['IPI_Base_Number'],
+								'Personal_Number'				=> $this->Shareholders[$ip_number]['Personal_Number'],
+
 								'PR_Society'					=> $this->Shareholders[$ip_number]['PRO'],
 								'PR_Ownership_Share'			=> $shareholder['PR_Ownership_Share'],
 								'MR_Society'					=> $this->Shareholders[$ip_number]['MRO'],
 								'MR_Ownership_Share'			=> $shareholder['MR_Ownership_Share'],
 								'SR_Society'					=> $this->Shareholders[$ip_number]['SRO'],
 								'SR_Ownership_Share'			=> $shareholder['SR_Ownership_Share'],
-								'USA_License_Ind'				=> substr($this->Shareholders[$ip_number]['US_Rep'], 0, 1)
+								'USA_License_Ind'				=> substr($this->Shareholders[$ip_number]['US_Rep'], 0, 1),
+
+								'Reversionary_Indicator'		=> $shareholder['Reversionary_Indicator'],
+								'First_Recording_Refusal_Ind'	=> $shareholder['First_Recording_Refusal_Ind'],
+								'Work_For_Hire_Indicator'		=> $shareholder['Work_For_Hire_Indicator'],
+								
 							);
 
 							if($this->Shareholders[$ip_number]['Controlled'] == 'Y')
 									$rec['Record_Type'] = 'SWR';
 							else 	$rec['Record_Type'] = 'OWR';
 
-//							if($ipi < 100000000  && $this->Shareholders[$ipi]['Controlled']=='N') // Remove SOCAN temp IPIs from OWR records
-//							{
-//							    $rec['Interested_Party_Number']        = '';
-//							    $rec['Writer_CAE_IPI_Name_Number']    = '';
-//							}
 							$cwr .= encode_cwr($this->Msgs, $rec, $group_tx, $sq);
 
 							$territory_sq = 0;
@@ -1641,7 +1878,7 @@ class WorksRegistration {
 									$sh++;
 									$territory_sq++;
 
-									if($rec['Record_Type'] == 'SWR') $swt_owt = "SWT";
+									if($rec['Record_Type'] == 'SWR') $swt_owt = 'SWT';
 									else $swt_owt = "OWT";
 
 									$rec = array(
@@ -1744,13 +1981,14 @@ class WorksRegistration {
 									'Performing_Artist_Last_Name' 			=> $this->Performers[$performer_id]['Last_Name'],
 									'Performing_Artist_First_Name' 			=> $this->Performers[$performer_id]['First_Name'],
 									'Performing_Artist_CAE_IPI_Name_Number' => $this->Performers[$performer_id]['IPI_Name_Number'],
-									'Performing_Artist_IPI_Base_Number' 	=> $this->Performers[$performer_id]['IPI_base']);
+									'Performing_Artist_IPI_Base_Number' 	=> $this->Performers[$performer_id]['IPI_Base_Number']);
 
 								$cwr .= encode_cwr($this->Msgs, $rec, $group_tx, $sq);
 							}
 						}
 
 						/* REC - Recording Detail - only create a record if we have an associated ISRC */
+						$work['ISRC'] = $this->getISRCs();
 						if(is_array($work['ISRC']))
 						{
 							$recordings = array();
@@ -1761,7 +1999,8 @@ class WorksRegistration {
 
 									$rec = array(
 										'Record_Type'				=> 'REC',
-										'Recording_Format'			=> 'A',
+										'Recording_Format'			=> $this->track[$isrc]['Recording_Format'],
+										'Recording_Technique'		=> $this->track[$isrc]['Recording_Technique'],
 										'First_Release_Duration'	=> $work['Duration'],
 										'ISRC'						=> $isrc
 									);
@@ -1954,6 +2193,7 @@ class WorksRegistration {
 
 		return($this->CWR_Work_IDs); // return the list of Work_IDs included in this CWR file (for audit trail purposes).
 	}
+	// end of WriteCWR()
 
 	function ReadCWR()
 	{
@@ -2032,7 +2272,7 @@ class WorksRegistration {
 						$record['Work_ID']		= intval($record['Submitter_Work_ID']);
 						$record['Title']		=& $record['Work_Title'];
 						$record['Work_Type']	= $record['CWR_Work_Type'];
-						$record['Lang']			= $record['Language_Code'];
+						$record['Language_Code']			= $record['Language_Code'];
 
 						$test = $this->getWorkDetails();
 						if($test['Work_ID'] == $record['Work_ID'])
@@ -2089,7 +2329,6 @@ class WorksRegistration {
 
 					case 'MSG':
 					{
-//						print_r($record);
 						$record['Transaction_Number'] = intval($record['Tx_Count']);
 						$this->addMessage($record);
 
@@ -2107,24 +2346,25 @@ class WorksRegistration {
 						else $record['Controlled'] = 'N';
 
 						$this->addShareholder(array(
-							'IP_Number'					=> $record['Interested_Party_Number'],
-							'IPI_Name_Number'			=> $record['Publisher_CAE_IPI_Name_Number'],
-							'IPI_Base_Number'			=> $record['Publisher_IPI_Base_Number'],
-							'First_Name'				=> '', // First_Name is left blank for publishers
-							'Name'						=> $record['Publisher_Name'],
-							'PRO'						=> $record['PR_Society'],
-							'MRO'						=> $record['MR_Society'],
-							'SRO'						=> $record['SR_Society'],
-							'Controlled'				=> $record['Controlled'],
-							'US_Rep'					=> $record['USA_License_Ind']));
+							'IP_Number'						=> $record['Interested_Party_Number'],
+							'IPI_Name_Number'				=> $record['Publisher_CAE_IPI_Name_Number'],
+							'IPI_Base_Number'				=> $record['Publisher_IPI_Base_Number'],
+							'First_Name'					=> '', // First_Name is left blank for publishers
+							'Name'							=> $record['Publisher_Name'],
+							'PRO'							=> $record['PR_Society'],
+							'MRO'							=> $record['MR_Society'],
+							'SRO'							=> $record['SR_Society'],
+							'Controlled'					=> $record['Controlled'],
+							'US_Rep'						=> $record['USA_License_Ind']));
 
 						$this->NewShare(array(
-							'IP_Number'					=> $record['Interested_Party_Number'],
-							'Link'						=> intval($record['Publisher_Sequence_Number']),
-							'Role'						=> $record['Publisher_Type'],
-							'PR_Ownership_Share'		=> $record['PR_Ownership_Share'],
-							'MR_Ownership_Share'		=> $record['MR_Ownership_Share'],
-							'SR_Ownership_Share'		=> $record['SR_Ownership_Share']));
+							'IP_Number'						=> $record['Interested_Party_Number'],
+							'Link'							=> intval($record['Publisher_Sequence_Number']),
+							'Role'							=> $record['Publisher_Type'],
+							'PR_Ownership_Share'			=> $record['PR_Ownership_Share'],
+							'MR_Ownership_Share'			=> $record['MR_Ownership_Share'],
+							'SR_Ownership_Share'			=> $record['SR_Ownership_Share'],
+							'Special_Agreements_Indicator'	=> $record['Special_Agreements_Indicator']));
 						break;
 					}
 
@@ -2298,8 +2538,8 @@ class WorksRegistration {
 
 					default:
 					{
-						$this->Msgs[] = sprintf("Skipping record type '%s' (line %d)\n", $record['Record_Type'], $line);
-						if(!empty($record['Record_Type'])) $this->Msgs[] = sprintf("Skipping Record Type '%s' -- Expected record number %d (line %d)\n", $record['Record_Type'], $rc, $line);
+						$this->Msgs[] = sprintf("Skipping record type '%s' (line %d)", $record['Record_Type'], $line);
+						if(!empty($record['Record_Type'])) $this->Msgs[] = sprintf("Skipping Record Type '%s' -- Expected record number %d (line %d)", $record['Record_Type'], $rc, $line);
 					}
 				}
 
@@ -2315,5 +2555,7 @@ class WorksRegistration {
 		$this->CWR_Work_IDs = array_unique($this->CWR_Work_IDs);
 		return(true);
 	}
+	// end of ReadCWR()
+
 }
 ?>
