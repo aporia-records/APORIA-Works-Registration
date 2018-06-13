@@ -241,7 +241,7 @@ class WorksRegistration {
 
 			if(isset($data['Title'])) 
 			{
-				$data['Title'] = strtoupper(filterchars($data['Title']));
+				$data['Title'] = filterchars(strtoupper($data['Title']));
 				if($this->Transliterate) $data['Title'] = transliterate($data['Title'], $data['Language_Code']);
 			}
 
