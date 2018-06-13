@@ -39,9 +39,12 @@
 define("EDI_Version", "01.10");
 define("CWR_Version", "02.10"); // CWR2.1
 
-function is_not_array($arr) // This function simply reverses the output of is_array()
+if (!function_exists('is_not_array'))
 {
-	return(is_array($arr) ? false : true);
+	function is_not_array($arr) // This function simply reverses the output of is_array()
+	{
+		return(is_array($arr) ? false : true);
+	}
 }
 
 /*	UPC and EAN-13 check digit validator
@@ -92,7 +95,7 @@ function is_valid_ipi_name($ipi_name_number)
 	$ipi_name_number = sprintf("%011d", $ipi_name_number);
 	if(strlen($ipi_name_number) != 11 || !preg_match("/[0-9]{11}/", $ipi_name_number)) return(false);
 
-	$digits = str_split($ipi_name_number);
+	$digits = str_split(trim($ipi_name_number));
 
 	$sum = 0;
 	$weight = 10;
@@ -115,7 +118,7 @@ function is_valid_ipi_base($ipi_base_number)
 {
 	if(empty($ipi_base_number)) return(true);
 	if(!preg_match("/I-[0-9]{9}-[0-9]/", $ipi_base_number)) return(false);
-	$digits = str_split(str_replace('-', '', $ipi_base_number));
+	$digits = str_split(trim(str_replace('-', '', $ipi_base_number)));
 
 	$sum = 2; // starting weight/product for $digits[0] ('I'), as per the CWR User Manual
 
@@ -131,12 +134,12 @@ function is_valid_ipi_base($ipi_base_number)
 function is_valid_iswc($iswc)
 {
 	if(!preg_match("/T[0-9]{10}/", $iswc)) return(false);
-	$digits = str_split(str_replace('.', "", $iswc));
+	$digits = str_split(trim(str_replace('.', "", $iswc)));
 
 	$sum = 1;	// starting weight/product for $digits[0] ('T'), as per ISO/TC 46/SC 9 N 268
 
 	for ($i = 1; $i <= 9; $i++)
-		$sum = $sum + $i * intval($digits[$i]);
+		$sum += $i * intval($digits[$i]);
 
 	$checkSum = $sum % 10;
 	if ($checkSum !== 0) $checkSum = 10 - $checkSum;
@@ -468,7 +471,7 @@ function filterchars($str)  // Strip all non-valid characters
  * @param string $string Text that might have accent characters
  * @return string Filtered string with replaced "nice" characters.
  */
-function transliterate($string)
+function transliterate($string, $language_code = 'EN')
 {
 	if ( !preg_match('/[\x80-\xff]/', $string) ) return($string);
 
@@ -650,9 +653,7 @@ function transliterate($string)
 		);
 
 		// Used for locale-specific rules
-		$locale = get_locale();
-
-		if ( 'de_DE' == $locale ) {
+		if ( 'DE' == $language_code ) {
 			$chars[ chr(195).chr(132) ] = 'Ae';
 			$chars[ chr(195).chr(164) ] = 'ae';
 			$chars[ chr(195).chr(150) ] = 'Oe';
@@ -660,7 +661,7 @@ function transliterate($string)
 			$chars[ chr(195).chr(156) ] = 'Ue';
 			$chars[ chr(195).chr(188) ] = 'ue';
 			$chars[ chr(195).chr(159) ] = 'ss';
-		} elseif ( 'da_DK' === $locale ) {
+		} elseif ( 'DK' === $language_code ) {
 			$chars[ chr(195).chr(134) ] = 'Ae';
  			$chars[ chr(195).chr(166) ] = 'ae';
 			$chars[ chr(195).chr(152) ] = 'Oe';

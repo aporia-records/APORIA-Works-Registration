@@ -22,6 +22,7 @@
 
 */
 
+
 require("cwr-lib.php");
 
 class WorksRegistration {
@@ -30,7 +31,7 @@ class WorksRegistration {
 	const Name		= "APORIA Works Registration";
 
 	// Version/revision of this class
-	const Version	= 1.46;
+	const Version	= 1.47;
 
 	// bitmasks for registration groups/transaction types
 	const CWR_NWR	= 1;
@@ -107,11 +108,16 @@ class WorksRegistration {
 	public	$Software_Package;
 	public	$Software_Package_Version;
 
+/* DDEX fields will be held in the DDEX array: */
+	public $DDEX = array();
+
 /* Callback functions */
 	public $callback_find_unknown_writer = null; // should return an ID if the unknown writer is already in the database
 	public $callback_lookup_ipi = null; // check if the IPI is valid/exists in the IPI database
 
+/* OTHER RUNTIME SETTINGS */
 	public $Transliterate = false;	// If true, characters will be transliterated to their valid CIS Character Set equivalents
+    public $No_Society_Code = '';	// Default value to use when no society is delcared for a given shareholder.  This can be changed to '099' if you find it necessary
 
 /**
  TIS Rewrite Rules:
@@ -236,7 +242,7 @@ class WorksRegistration {
 			if(isset($data['Title'])) 
 			{
 				$data['Title'] = strtoupper(filterchars($data['Title']));
-				if($this->Transliterate) $data['Title'] = transliterate($data['Title']);
+				if($this->Transliterate) $data['Title'] = transliterate($data['Title'], $data['Language_Code']);
 			}
 
 			foreach($data as $key => $value) {
@@ -313,7 +319,7 @@ class WorksRegistration {
 			// Strip invalid characters Alternative Title field
 			if($data['Title_Type'] == 'OL' || $data['Title_type'] == 'AL') $National_Title = true;
 			$data['Alternate_Title'] = strtoupper(filterchars($value), $National_Title);
-			if($this->Transliterate) $data['Alternate_Title'] = transliterate($data['Alternate_Title']);
+			if($this->Transliterate) $data['Alternate_Title'] = transliterate($data['Alternate_Title'], $data['Language_Code']);
 		}
 
 		$this->Works[$this->CurrentWork][$list][] = $data;
@@ -494,6 +500,9 @@ class WorksRegistration {
 
 		if(is_array($data))
 		{
+			// Indicator and Include_Exclude_Indicator have the same meanings.... for backwards compatility with older versions
+			if(array_key_exists('Include_Exclude_Indicator', $data)) $data['Indicator'] =& $data['Include_Exclude_Indicator'];
+
 			// Collection values should be zero if this territory is being excluded - added in v1.44
 			if($data['Indicator'] == 'E')
 			{
@@ -1098,14 +1107,21 @@ class WorksRegistration {
 
 				if($performer_number > 0) $this->Performers[$performer_number]['IPI_Base_Number'] = $this->Shareholders[$ip_number]['IPI_Base_Number'];
 
-				if(!empty($data['PRO'])) $this->Shareholders[$ip_number]['PRO'] = $data['PRO'];
-				else $this->Shareholders[$ip_number]['PRO'] = 99; // Default to No Society if none is declared
+                if(!empty($data['PRO'])) $this->Shareholders[$ip_number]['PRO'] = $data['PRO'];
+                else $this->Shareholders[$ip_number]['PRO'] = $this->No_Society_Code; // Default to No Society if none is declared
 
-				if(!empty($data['MRO'])) $this->Shareholders[$ip_number]['MRO'] = $data['MRO'];
-				else $this->Shareholders[$ip_number]['MRO'] = 99; // Default to No Society if none is declared
+                if(!empty($data['MRO'])) $this->Shareholders[$ip_number]['MRO'] = $data['MRO'];
+                else $this->Shareholders[$ip_number]['MRO'] = $this->No_Society_Code; // Default to No Society if none is declared
 
-				if(!empty($data['SRO'])) $this->Shareholders[$ip_number]['SRO'] = $data['SRO'];
-				else $this->Shareholders[$ip_number]['SRO'] = 99; // Default to No Society if none is declared
+                if(!empty($data['SRO'])) $this->Shareholders[$ip_number]['SRO'] = $data['SRO'];
+                else $this->Shareholders[$ip_number]['SRO'] = $this->No_Society_Code; // Default to No Society if none is declared
+
+                if(intval($this->No_Society_Code) != 99)
+                {
+                    if(intval($this->Shareholders[$ip_number]['PRO']) == 99) $this->Shareholders[$ip_number]['PRO'] = $this->No_Society_Code;
+                    if(intval($this->Shareholders[$ip_number]['MRO']) == 99) $this->Shareholders[$ip_number]['MRO'] = $this->No_Society_Code;
+                    if(intval($this->Shareholders[$ip_number]['SRO']) == 99) $this->Shareholders[$ip_number]['SRO'] = $this->No_Society_Code;
+                }
 
 				if(!empty($data['Personal_Number'])) $this->Shareholders[$ip_number]['Personal_Number'] = $data['Personal_Number'];
 				else $this->Shareholders[$ip_number]['Personal_Number'] = ''; // Initialize Personal Number if none specified
@@ -1193,12 +1209,17 @@ class WorksRegistration {
 		return($ip_number);
 	}
 
+	function getPerfomers()
+	{
+		return($this->Works[$this->CurrentWork]['PER']);
+	}
+
 	function addPerformer($lastname, $firstname = '', $ipi_name_number = 0, $ipi_base_number = '')
 	{
 		$found = false;
 		$i = 1;
 
-		while($i < count($this->Performers) && !$found)
+		while($i <= count($this->Performers) && !$found)
 		{
 			if(!isset($this->Performers[$i])) break;
 			$performer =& $this->Performers[$i];
@@ -1209,8 +1230,11 @@ class WorksRegistration {
 
 		if(!is_valid_ipi_base($ipi_base_number)) $ipi_base_number = ''; // Replace invalid IPI Base Numbers with blanks
 
-		$ip_number = $this->findShareholderByIPIName($ipi_name_number);
-		if($ip_number) $ipi_base_number = $this->Shareholders[$ip_number]['IPI_Base_Number'];
+		if($ipi_name_number > 0)
+		{
+			$ip_number = $this->findShareholderByIPIName($ipi_name_number);
+			if($ip_number) $ipi_base_number = $this->Shareholders[$ip_number]['IPI_Base_Number'];
+		}
 
 		if($found == false)
 		{
@@ -1479,7 +1503,8 @@ class WorksRegistration {
 			$this->Msgs[] = "CANNOT GENERATE CWR!\nSubmitter code or IPI not supplied.";
 			return(false);
 		}
-		if(!array_key_exists($this->submitter_ipi, $this->Shareholders))
+
+		if(!$submitter_ip = $this->findShareholderByIPIName($this->submitter_ipi))
 		{
 			$this->Msgs[] = "CANNOT GENERATE CWR!\nSubmitter Name not supplied - use addShareholder() to include it.";
 			return(false);
@@ -1494,7 +1519,7 @@ class WorksRegistration {
 				'Record_Type'		=> 'HDR',
 				'Sender_Type' 		=> 'PB', 
 				'Sender_ID'			=> $this->submitter_ipi, 
-				'Sender_Name'		=> $this->Shareholders[$this->submitter_ipi]['Name'], 
+				'Sender_Name'		=> $this->Shareholders[$submitter_ip]['Name'], 
 				'Creation_Date'		=> $this->creation_date,
 				'Creation_Time'		=> $this->creation_time,
 				'Transmission_Date'	=> $this->transmission_date,
@@ -1967,6 +1992,7 @@ class WorksRegistration {
 						}
 
 						/* Performing Artist */
+						$work['PER'] = $this->getPerfomers();
 						if(!empty($work['PER']))
 						{
 							foreach($work['PER'] as $performer_id)
@@ -2556,6 +2582,12 @@ class WorksRegistration {
 		return(true);
 	}
 	// end of ReadCWR()
+
+/******************************************************
+/* DDEX Registration Formats
+/******************************************************/
+
+
 
 }
 ?>
