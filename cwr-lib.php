@@ -736,7 +736,6 @@ function check_record(&$data, $mandatory = array(), $optional = array())
 
 	if(!isset($data['Record_Type'])) return("Error: No record type provided!");
 
-
 	foreach($data as $key => $value)
 	{
 		if(!empty($value))
@@ -770,6 +769,12 @@ function check_record(&$data, $mandatory = array(), $optional = array())
 					case 8: $data[$key] = encode_time($value); break;// encode time
 					default: $error = sprintf("%s is not in a valid format!", $key);
 				}
+
+			if(stristr($key, "_Society")) // This field contains a Society Code
+			{
+				$data[$key] = sprintf("%03d", $data[$key]); // Format as a 3-digit code
+				if(empty($data[$key])) $data[$key] = '   '; // Replace zero values with blanks
+			}
 		}
 	}
 
@@ -923,6 +928,8 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 						'Catalogue_Number' => 25,
 						'Priority_Flag' => 1));
 
+			print_r($data);
+
 			$data = sprintf("%19s%-60s%-2s%-14s%11s%8s%-12s%3s%6s%1s%3s%3s%3s%3s%3s%3s%30s%10s%2s%1s%03d%8s%1s%-25s%-25s%1s",
 						record_prefix($rec['Record_Type'], $Transaction_Sq, $Record_Sq),
 						$rec['Work_Title'],
@@ -983,7 +990,8 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 
 			if($rec['First_Recording_Refusal_Ind'] != 'Y') $rec['First_Recording_Refusal_Ind'] = 'N';
 
-			$data = sprintf("%19s%02d%09d%-45s%1s%-2s%09d%-11s%14s%03d%05d%03d%05d%03d%05d%1s%1s%1s%-13s%14s%14s%2s%1s",
+//			$data = sprintf("%19s%02d%09d%-45s%1s%-2s%09d%-11s%14s%03d%05d%03d%05d%03d%05d%1s%1s%1s%-13s%14s%14s%2s%1s",
+			$data = sprintf("%19s%02d%09d%-45s%1s%-2s%09d%-11s%14s%3s%05d%3s%05d%3s%05d%1s%1s%1s%-13s%14s%14s%2s%1s",
 						record_prefix($rec['Record_Type'], $Transaction_Sq, $Record_Sq),
 						$rec['Publisher_Sequence_Number'],
 						$rec['Interested_Party_Number'],
@@ -1089,7 +1097,8 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 								'Personal_Number' => 12,
 								'USA_License_Ind' => 1));
 
-			$data = sprintf("%19s%9s%-45s%-30s%1s%-2s%09s%-11s%03d%05d%03d%05d%03d%05d%1s%1s%1s%1s%-13s%012d%1s",
+//			$data = sprintf("%19s%9s%-45s%-30s%1s%-2s%09s%-11s%03d%05d%03d%05d%03d%05d%1s%1s%1s%1s%-13s%012d%1s",
+			$data = sprintf("%19s%9s%-45s%-30s%1s%-2s%09s%-11s%3s%05d%3s%05d%3s%05d%1s%1s%1s%1s%-13s%012d%1s",
 						record_prefix($rec['Record_Type'], $Transaction_Sq, $Record_Sq),
 						$rec['Interested_Party_Number'], // submitter's number -- not the same as IPI
 						$rec['Writer_Last_Name'],
@@ -1266,6 +1275,9 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 			/* CWR v2.2+ fields: */
 			if($CWR_Version > 2.1)
 			{
+				if(is_valid_isrc($rec['ISRC'])) $rec['ISRC_Validity'] = 'Y';
+				else $rec['ISRC_Validity'] = 'N';
+
 				$data .= sprintf("%-60s%-60s%-60s%-60s%-20s%-14s",
 						$rec['Recording_Title'],
 						$rec['Version_Title'],
@@ -1377,6 +1389,7 @@ function encode_cwr(&$msgs, $rec, $Transaction_Sq = false, $Record_Sq = false)
 
 	return($data);
 }
+/* End of encode_cwr() */
 
 function decode_cwr($rec)
 {
@@ -1794,4 +1807,6 @@ function decode_cwr($rec)
 	
 	return($data);
 }
+/* End of decode_cwr() */
+
 ?>

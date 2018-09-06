@@ -2,7 +2,7 @@
 /*************************** APORIA WorksRegistration Class ***************************
 
 	APORIA Works Registration
-	Copyright © 2016, 2017 Gord Dimitrieff <gord@aporia-records.com>
+	Copyright © 2016, 2017, 2018 Gord Dimitrieff <gord@aporia-records.com>
 
 	This file is part of APORIA Works Registration, a PHP library for reading, 
 	writing and manipulating CISAC Common Works Registration (CWR) files.
@@ -22,6 +22,28 @@
 
 */
 
+/* 
+
+Full changlog here:
+https://github.com/aporia-records/APORIA-Works-Registration/wiki/Change-Log
+
+v1.48
+bug fixes:
+- CWR_Revision: now defaults to revision 1 if CWR version is set to 2.2
+- addShareholder(): now correctly returns true if a shareholder was successfully added
+- Publisher roles now correctly sorted: The first SPU record within a chain must be for an Original Publisher or Income Participant (Publisher Type = “E” or “PA”).
+- empty/null values for Society Code fields are now outputted correctly
+- cwr-lib.php: ISRC_Validity flag is now set after checking the ISRC supplied for a 'REC' record type
+- setXRef(): will now skip any record with an Organisation Code of '000' or '099'
+- addShareholder(): Now strips invalid Society Codes and replaces with the No Society value
+- addPerformer(); Now converts names to upper-case
+
+New functions:
+addAltTitle(title, type, language) - will add an ALT list entry
+getAltTitles() - returns the ALT list array
+removeShare() - removes the current share and reindexes the shares array within the work
+
+*/
 
 require("cwr-lib.php");
 
@@ -31,7 +53,7 @@ class WorksRegistration {
 	const Name		= "APORIA Works Registration";
 
 	// Version/revision of this class
-	const Version	= 1.47;
+	const Version	= 1.48;
 
 	// bitmasks for registration groups/transaction types
 	const CWR_NWR	= 1;
@@ -83,6 +105,25 @@ class WorksRegistration {
 	private $creation_date;
 	private $creation_time;
 
+	private $CISAC_Society_Codes = array(
+		  1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  14,  15,  16,  17,  18,  19,  20,  21,
+		 22,  23,  24,  25,  26,  28,  29,  30,  31,  32,  33,  34,  35,  36,  37,  38,  39,  40,  41,  43, 
+		 44,  45,  47,  48,  49,  50,  51,  52,  54,  55,  56,  57,  58,  59,  60,  61,  62,  63,  64,  65, 
+		 66,  67,  68,  69,  70,  71,  72,  73,  74,  75,  76,  77,  78,  79,  80,  82,  84,  85,  86,  87, 
+		 88,  89,  90,  91,  93,  94,  95,  96,  98, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 
+		112, 115, 116, 117, 118, 119, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 
+		135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 151, 152, 153, 154, 155, 
+		156, 157, 158, 159, 160, 161, 162, 163, 164, 166, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 
+		178, 179, 181, 182, 183, 184, 186, 187, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 
+		201, 202, 203, 204, 206, 207, 208, 209, 210, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 
+		223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 
+		243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 256, 257, 258, 259, 260, 261, 262, 263, 
+		264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275, 276, 277, 278, 279, 280, 281, 282, 283, 
+		284, 285, 286, 287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 303, 
+		304, 306, 307, 308, 309, 310, 311, 312, 313, 314, 315, 316, 317, 318, 319, 320, 321, 322, 635, 658, 
+		672, 707, 758, 775, 776, 777, 778, 779, 888
+	);
+
 	private $TIS_Numeric_Codes = array(
 		4, 8, 12, 20, 24, 28, 31, 32, 36, 40, 44, 48, 50, 51, 52, 56, 64, 68, 70, 72, 76, 84, 90, 96, 100, 104, 108, 112, 
 		116, 120, 124, 132, 140, 144, 148, 152, 156, 158, 170, 174, 178, 180, 188, 191, 192, 196, 200, 203, 204, 208, 212, 
@@ -104,7 +145,7 @@ class WorksRegistration {
 
 /* CWR v2.2 fields */
 	public	$CWR_Version;
-	public	$CWR_Revision	= 0;
+	public	$CWR_Revision;
 	public	$Software_Package;
 	public	$Software_Package_Version;
 
@@ -137,11 +178,12 @@ class WorksRegistration {
 		$this->creation_time		= date('Hms');
 		$this->CWR_Filename 		= $this->cwr_filename(); // substr to shorten date to YYMMDD format as per filename specifications
 		$this->EXCEL_Filename		= sprintf("%s-CATALOG-%s.csv", $this->submitter_code, substr($this->creation_date, 2));
-		$this->CWR_Version			= (float) CWR_Version; /* Constant defined in cwr-lib.php */
-		$this->file_version 		= 1; //file sequence starts at number 1.
+		$this->CWR_Version			= (float) CWR_Version;	/* Constant defined in cwr-lib.php */
+
+		$this->file_version 		= 1;	//file sequence starts at number 1.
 
 		$this->Software_Package			=	substr(self::Name, 0, 30);
-		$this->Software_Package_Version =	substr(sprintf("%1.1f/PHP %s", self::Version, phpversion()), 0, 30);
+		$this->Software_Package_Version =	substr(sprintf("%1.2f/PHP %s", self::Version, phpversion()), 0, 30);
 
 		$this->CWR_Work_IDs			= array();
 
@@ -312,16 +354,15 @@ class WorksRegistration {
 		$list = $data['Record_Type'];
 		unset($data['Record_Type']);
 
-		if($list = 'ALT')
+		if($list == 'ALT')
 		{
 			$National_Title = false;
 
 			// Strip invalid characters Alternative Title field
-			if($data['Title_Type'] == 'OL' || $data['Title_type'] == 'AL') $National_Title = true;
-			$data['Alternate_Title'] = strtoupper(filterchars($value), $National_Title);
+			if($data['Title_Type'] == 'OL' || $data['Title_Type'] == 'AL') $National_Title = true;
+			$data['Alternate_Title'] = filterchars(strtoupper($data['Alternate_Title']));
 			if($this->Transliterate) $data['Alternate_Title'] = transliterate($data['Alternate_Title'], $data['Language_Code']);
 		}
-
 		$this->Works[$this->CurrentWork][$list][] = $data;
 	}
 
@@ -357,6 +398,16 @@ class WorksRegistration {
 		$this->CurrentShare++;
 		if(empty($data['Link'])) $data['Link'] = 0;
 		return($this->setShareDetails($data));
+	}
+
+	function removeShare() // remove the current share and reindex the array
+	{
+		$shareKey = $this->CurrentShare;
+		$firstKey = min(array_keys($this->Works[$this->CurrentWork]['Share']));
+		if($firstKey == 0) $shareKey--;
+		
+		unset($this->Works[$this->CurrentWork]['Share'][$shareKey]);
+		$this->Works[$this->CurrentWork]['Share'] = array_merge($this->Works[$this->CurrentWork]['Share']);
 	}
 
 	function getShareDetails()
@@ -526,6 +577,8 @@ class WorksRegistration {
 
 			if(!array_key_exists('Shares_Change', $this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]))
 				$this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['Shares_Change'] = 'N';
+			else if(empty($this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['Shares_Change'])) 
+				$this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['Shares_Change'] = 'N';
 
 			if($this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['Indicator'] == 'I' &&
 				($this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['PR_Collection_Share']
@@ -533,7 +586,8 @@ class WorksRegistration {
 				+	$this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]['SR_Collection_Share'] == 0)) 
 			{
 				$ip_number =& $this->Works[$this->CurrentWork]['Share'][$this->CurrentShare]['IP_Number'];
-				$this->Msgs[] = sprintf("addTerritory: PR Collection Share, MR Collection Share, and SR Collection Share cannot all be zero for Interested Party number %d.", $ip_number);
+				$this->Msgs[] = sprintf("addTerritory: PR Collection Share, MR Collection Share, and SR Collection Share cannot all be zero for Interested Party %d -- removing entry.", $ip_number);
+				unset($this->Works[$this->CurrentWork]['Share'][$shareKey]['TIS'][$TIS]); // Remove empty territory from the collection shares
 				return(false);
 			}
 
@@ -553,10 +607,54 @@ class WorksRegistration {
 			if($this->Shareholders[$ip_number]['Controlled']=='Y') $this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByControl']=1;
 			else $this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByControl']=0;
 
-			$sortByControl[$shareKey] = $this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByControl'];
-			$sortByChain[$shareKey] = $this->Works[$this->CurrentWork]['Share'][$shareKey]['Link'];
+			switch($share['Role'])
+			{
+				case 'A': // Author, Writer, Author of Lyrics	The creator or one of the creators of a text of a musical work.
+				case 'C': // Composer, Writer	The creator or one of the creators of the musical elements of a musical work.
+				case 'CA': // Composer/Author	The creator or one of the creators of text and musical elements within a musical work.
+				{
+					$this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByRole']=1;
+					break;
+				}
+				case 'TR': // Translator:	A modifier of a text in a different language.
+				case 'AR': // Arranger:		A modifier of musical elements of a musical work.
+				case 'SA': // Sub Author:	The author of text which substitutes or modifies an existing text of musical work.
+				case 'AD': // Adaptor:		The author or one of the authors of an adapted text of a musical work.
+				case 'SR': // Sub Arranger:	A creator of arrangements authorized by the Sub-Publisher.
+				{
+					$this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByRole']=2;
+					break;
+				}
+				case 'E': //publishers
+				{
+					$this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByRole']=3;
+					break;
+				}
+				case 'PA': //publishers
+				{
+					$this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByRole']=4;
+					break;
+				}
+				case 'ES': //	Substituted Publisher	A publisher acting on behalf of publisher or sub-publisher.
+				case 'AM': //	Administrator	An interested party that collects royalty payments on behalf of a publisher that it represents.
+				{
+					$this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByRole']=5;
+					break;
+				}
+				case 'SE': // sub-publisher
+				case 'AQ': //	Acquirer	A publisher that acquires some or all of the ownership from an Original Publisher, but yet the Original Publisher still controls the work.
+				{
+					$this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByRole']=6;
+					break;
+				}
+			}
+
+			$sortByRole[$shareKey]		= $this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByRole'];
+			$sortByControl[$shareKey]	= $this->Works[$this->CurrentWork]['Share'][$shareKey]['sortByControl'];
+			$sortByChain[$shareKey]		= $this->Works[$this->CurrentWork]['Share'][$shareKey]['Link'];
 		}
-		array_multisort($sortByControl, SORT_DESC, $sortByChain, SORT_ASC, $this->Works[$this->CurrentWork]['Share']);
+		array_multisort($sortByControl, SORT_DESC, $sortByChain, SORT_ASC, $sortByRole, SORT_ASC, $this->Works[$this->CurrentWork]['Share']);
+//		array_multisort($sortByControl, SORT_DESC, $sortByChain, SORT_ASC, $this->Works[$this->CurrentWork]['Share']);
 
 		// Reset the array index so that it begins at 1 rather than 0:
 		$this->Works[$this->CurrentWork]['Share'] = array_combine(range(1, count($this->Works[$this->CurrentWork]['Share'])), array_values($this->Works[$this->CurrentWork]['Share']));
@@ -679,7 +777,7 @@ class WorksRegistration {
 		$this->CurrentXRef = 0;
 		$xrefCheck = array();
 
-		if(!isset($work['Transaction_Type'])) $work['Transaction_Type'] = self::CWR_NWR;  // Default to NWR registrations
+		if(empty($work['Transaction_Type'])) $work['Transaction_Type'] = self::CWR_NWR;  // Default to NWR registrations
 
 		while($this->NextXRef())
 		{
@@ -1015,9 +1113,12 @@ class WorksRegistration {
 
 		if(is_array($data))
 		{
-			foreach($data as $key => $value)
-				$this->Works[$this->CurrentWork]['XRefs'][$xrefKey][$key] = trim($value);
-			return(true);
+			if(!empty($data['Organisation_Code']) && intval($data['Organisation_Code']) != 99) // Do not use “000”or “099”.
+			{
+				foreach($data as $key => $value)
+					$this->Works[$this->CurrentWork]['XRefs'][$xrefKey][$key] = trim($value);
+				return(true);
+			}
 		}
 		else return(false);
 	}
@@ -1059,7 +1160,7 @@ class WorksRegistration {
 	{
 		if(!is_array($data) && !isset($data['IP_Number']))
 		{
-			$this->Msgs[] = "addShareholder() - requires data in array form.  IPI is mandatory.";
+			$this->Msgs[] = "addShareholder() - requires data in array form.  IP_Number is mandatory.";
 			return(false);
 		}
 
@@ -1107,21 +1208,40 @@ class WorksRegistration {
 
 				if($performer_number > 0) $this->Performers[$performer_number]['IPI_Base_Number'] = $this->Shareholders[$ip_number]['IPI_Base_Number'];
 
-                if(!empty($data['PRO'])) $this->Shareholders[$ip_number]['PRO'] = $data['PRO'];
+                if(intval($data['PRO']) > 0) $this->Shareholders[$ip_number]['PRO'] = $data['PRO'];
                 else $this->Shareholders[$ip_number]['PRO'] = $this->No_Society_Code; // Default to No Society if none is declared
 
-                if(!empty($data['MRO'])) $this->Shareholders[$ip_number]['MRO'] = $data['MRO'];
+                if(intval($data['MRO']) > 0) $this->Shareholders[$ip_number]['MRO'] = $data['MRO'];
                 else $this->Shareholders[$ip_number]['MRO'] = $this->No_Society_Code; // Default to No Society if none is declared
 
-                if(!empty($data['SRO'])) $this->Shareholders[$ip_number]['SRO'] = $data['SRO'];
+                if(intval($data['SRO']) > 0) $this->Shareholders[$ip_number]['SRO'] = $data['SRO'];
                 else $this->Shareholders[$ip_number]['SRO'] = $this->No_Society_Code; // Default to No Society if none is declared
 
+				// Replace 99 'no society' codes with the No_Society_Code
                 if(intval($this->No_Society_Code) != 99)
                 {
                     if(intval($this->Shareholders[$ip_number]['PRO']) == 99) $this->Shareholders[$ip_number]['PRO'] = $this->No_Society_Code;
                     if(intval($this->Shareholders[$ip_number]['MRO']) == 99) $this->Shareholders[$ip_number]['MRO'] = $this->No_Society_Code;
                     if(intval($this->Shareholders[$ip_number]['SRO']) == 99) $this->Shareholders[$ip_number]['SRO'] = $this->No_Society_Code;
                 }
+
+				// Strip invalid Society Codes
+				if(!empty($this->Shareholders[$ip_number]['PRO']) && !in_array(intval($this->Shareholders[$ip_number]['PRO']), $this->CISAC_Society_Codes)) 
+				{
+					$this->Msgs[] = sprintf("Invalid PRO Code %03d - removed from Interested Party %d (%s).", $this->Shareholders[$ip_number]['PRO'], $data['IP_Number'], $this->Shareholders[$ip_number]['Name']);
+					$this->Shareholders[$ip_number]['PRO'] = $this->No_Society_Code;
+				}
+				if(!empty($this->Shareholders[$ip_number]['MRO']) && !in_array(intval($this->Shareholders[$ip_number]['MRO']), $this->CISAC_Society_Codes))
+				{
+					$this->Msgs[] = sprintf("Invalid MRO Code %03d - removed from Interested Party %d (%s).", $this->Shareholders[$ip_number]['MRO'], $data['IP_Number'], $this->Shareholders[$ip_number]['Name']);
+					$this->Shareholders[$ip_number]['MRO'] = $this->No_Society_Code;
+					print_r($this->CISAC_Society_Codes);
+				}
+				if(!empty($this->Shareholders[$ip_number]['SRO']) && !in_array(intval($this->Shareholders[$ip_number]['SRO']), $this->CISAC_Society_Codes))
+				{
+					$this->Msgs[] = sprintf("Invalid SRO Code %03d - removed from Interested Party %d (%s).", $this->Shareholders[$ip_number]['SRO'], $data['IP_Number'], $this->Shareholders[$ip_number]['Name']);
+					$this->Shareholders[$ip_number]['SRO'] = $this->No_Society_Code;
+				}
 
 				if(!empty($data['Personal_Number'])) $this->Shareholders[$ip_number]['Personal_Number'] = $data['Personal_Number'];
 				else $this->Shareholders[$ip_number]['Personal_Number'] = ''; // Initialize Personal Number if none specified
@@ -1166,10 +1286,14 @@ class WorksRegistration {
 					}
 				}
 			}
-			else $this->Msgs[] = sprintf("Insufficient data in shareholders table! (Interested Party number: %d)", $ip_number);
-			return(false);	
+			else
+			{
+				$this->Msgs[] = sprintf("Insufficient data in shareholders table! (Interested Party: %d)", $ip_number);
+				return(false);
+			}
 		}
-		else return(true);
+		else return(false);
+		return(true);
 	}
 
 	function findPerformerByIPIName($ipi_name_number)
@@ -1214,10 +1338,27 @@ class WorksRegistration {
 		return($this->Works[$this->CurrentWork]['PER']);
 	}
 
+	function addAltTitle($title, $type, $language_code = '')
+	{
+		$this->addToList(array(
+			'Record_Type'		=> 'ALT', 
+			'Alternate_Title'	=> $title,
+			'Title_Type'		=> $type,
+			'Language_Code'		=> $language_code));
+	}
+
+	function getAltTitles()
+	{
+		return($this->Works[$this->CurrentWork]['ALT']);
+	}
+
 	function addPerformer($lastname, $firstname = '', $ipi_name_number = 0, $ipi_base_number = '')
 	{
 		$found = false;
 		$i = 1;
+
+		$lastname = strtoupper($lastname);
+		$firstname = strtoupper($firstname);
 
 		while($i <= count($this->Performers) && !$found)
 		{
@@ -1513,6 +1654,9 @@ class WorksRegistration {
 		if(empty($this->receiver_society))
 			$this->Msgs[] = "WARNING: No receiver society specified!";
 
+		if($this->CWR_Version == 2.2 && $this->CWR_Revision == 0)
+			$this->CWR_Revision		= 1;	// Set to CWR 2.2 revision 1 if not otherwise defined
+
 		/* Generate Transmission Header */
 		$rc++;
 		$rec = array(
@@ -1736,7 +1880,9 @@ class WorksRegistration {
 										$publisher[] = $this->getShareDetails();
 									else 
 									{
-										$this->Msgs[] = sprintf("NOTICE: Sub-Publisher '%s' has no collection rights in the relevant territorie(s) - removed from CWR.", $this->Shareholders[$shareholder['IPI_Name_Number']]['Name']);
+//										$this->Msgs[] = sprintf("NOTICE: Sub-Publisher '%s' has no collection rights in the relevant territorie(s) - removed from CWR.", $this->Shareholders[$shareholder['IPI_Name_Number']]['Name']);
+										$this->Msgs[] = sprintf("NOTICE: Sub-Publisher '%s' has no collection rights in the relevant territorie(s) - removed from CWR.", $shareholder['IPI_Name_Number']);
+										print_r($this->Shareholders[$shareholder['IPI_Name_Number']]);
 									}
 									break;
 								}
@@ -1897,7 +2043,8 @@ class WorksRegistration {
 							{
 								// Create a record for each collection territory defined under this share
 								if(!empty($shareholder['TIS'])) foreach($shareholder['TIS'] as $TIS_Numeric_Code => $territory)
-								{								$sq++;
+								{
+									$sq++;
 									$rc++;
 									$group_rc++;
 									$sh++;
@@ -1947,6 +2094,7 @@ class WorksRegistration {
 						}
 
 						/* ALT - Alternative Titles */
+						$work['ALT'] = $this->getAltTitles();
 						if(!empty($work['ALT'])) foreach($work['ALT'] as $altTitle)
 						{
 							$sq++;
@@ -2051,7 +2199,7 @@ class WorksRegistration {
 												$rec['CWR_Version'] = $this->CWR_Version;
 
 												/* CWR 2.2 adds track-level details: */
-												// ISRC validity will be checked by encode_cwr()
+												$rec['ISRC_Validity'] = 'Y'; // ISRC validity has already been checked by is_valid_isrc()
 												if(isset($this->track[$isrc]['Title']))			$rec['Recording_Title']					= $this->track[$isrc]['Title'];
 												if(isset($this->track[$isrc]['Version']))		$rec['Version_Title']					= $this->track[$isrc]['Version'];
 												if(isset($this->track[$isrc]['Artist_Name']))	$rec['Display_Artist']					= $this->track[$isrc]['Artist_Name'];
@@ -2302,7 +2450,7 @@ class WorksRegistration {
 
 						$test = $this->getWorkDetails();
 						if($test['Work_ID'] == $record['Work_ID'])
-						{							
+						{
 							$record['Transaction_Type'] = $record['Transaction_Type'] | $test['Transaction_Type'];
 							$this->setWorkDetails($record);
 						} else {
