@@ -3,7 +3,7 @@ Copyright © 2016-2018 Gord Dimitrieff <gord@aporia-records.com>
 
 See the [Wiki](https://github.com/aporia-records/APORIA-Works-Registration/wiki) for the [Change Log](https://github.com/aporia-records/APORIA-Works-Registration/wiki/Change-Log) and additional information on calculating various [CISAC checksums](https://github.com/aporia-records/APORIA-Works-Registration/wiki/How-to-calculate-checksums).
 
-**Current Version: 1.47**
+**Current Version: 1.48**
 
 APORIA Works Registration is a PHP library for reading, writing and manipulating CISAC Common Works Registration (CWR) v2.1R7 and v2.2 files. Aporia has been using this library in a production environment as a method of sending registrations to MusicMark and CMRRA directly from a Filemaker database since late 2016.
 
